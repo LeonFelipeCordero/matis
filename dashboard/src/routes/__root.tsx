@@ -6,7 +6,6 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/react-router'
-import { Network } from 'lucide-react'
 import appCss from '../styles.css?url'
 import type { QueryClient } from '@tanstack/react-query'
 
@@ -25,7 +24,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       ],
       links: [
         { rel: 'stylesheet', href: appCss },
-        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         { rel: 'manifest', href: '/manifest.json' },
       ],
     }),
@@ -72,9 +71,13 @@ function RootComponent() {
       </a>
       <header className="app-header">
         <Link to="/" className="brand" aria-label="Matis">
-          <span className="brand-mark">
-            <Network size={21} />
-          </span>
+          <img
+            className="brand-mark"
+            src="/logo.png"
+            alt=""
+            width={35}
+            height={35}
+          />
           Matis
         </Link>
         <Link to="/" className="header-link">
