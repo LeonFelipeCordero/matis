@@ -121,12 +121,8 @@ pre {
   letter-spacing: -0.035em;
 }
 .brand-mark {
-  display: grid;
-  place-items: center;
   width: 35px;
   height: 35px;
-  background: var(--secondary);
-  color: var(--primary);
   border-radius: 11px;
 }
 .header-link {
