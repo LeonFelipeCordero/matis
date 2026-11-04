@@ -12,7 +12,7 @@ export const defaultDatabasePath = () =>
   process.env.DATABASE_PATH ||
   join(
     process.env.XDG_DATA_HOME || join(homedir(), '.local/share'),
-    'atlas/atlas.sqlite',
+    'matis/matis.sqlite',
   )
 
 /** Infrastructure only: Python creates/migrates the file; never create a UI schema. */

@@ -10,10 +10,10 @@ test('shared default database lives in user data with explicit overrides', () =>
     delete process.env.DATABASE_PATH
     delete process.env.XDG_DATA_HOME
     expect(defaultDatabasePath()).toBe(
-      join(homedir(), '.local/share/atlas/atlas.sqlite'),
+      join(homedir(), '.local/share/matis/matis.sqlite'),
     )
     process.env.XDG_DATA_HOME = '/custom/user-data'
-    expect(defaultDatabasePath()).toBe('/custom/user-data/atlas/atlas.sqlite')
+    expect(defaultDatabasePath()).toBe('/custom/user-data/matis/matis.sqlite')
     process.env.DATABASE_PATH = '/custom/database.sqlite'
     expect(defaultDatabasePath()).toBe('/custom/database.sqlite')
   } finally {

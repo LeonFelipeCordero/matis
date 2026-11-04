@@ -14,8 +14,8 @@ interrupted. No source edits were made while it ran. The runner restored sources
 1,584 times, and the working tree was clean afterward.
 
 ```sh
-uv run --project atlas atlas mutations run --folder . --target all \
-  --output /tmp/atlas-mutation-validation/results.jsonl
+uv run --project matis matis mutations run --folder . --target all \
+  --output /tmp/matis-mutation-validation/results.jsonl
 ```
 
 All 23 configured targets were selected. They contained 3,514 candidate sites and
@@ -53,7 +53,7 @@ from the base commit: **14 failed, 61 passed**. Those failures cover all three
 fixes, including field ownership in Python, Java, and Kotlin. The final suite has
 **2,224 passing cases**, compared with the original 1,854: 370 additional cases.
 
-`atlas.json` now includes the new tests in affected target commands. In particular,
+`matis.json` now includes the new tests in affected target commands. In particular,
 mutation-candidate tests must include their parsing consumers. Existing directory
 selections already cover new runner, parsing, and storage tests.
 
@@ -62,7 +62,7 @@ selections already cover new runner, parsing, and storage tests.
 The fresh manifest inventory was generated after the fixes:
 
 ```sh
-uv run --project atlas atlas mutations --folder .
+uv run --project matis matis mutations --folder .
 ```
 
 The rerun selected every original survivor and timeout that still mapped to the
@@ -76,7 +76,7 @@ additional mutations in the changed files.
 Four independent temporary copies ran 92, 92, 91, and 91 mutations through
 `MutationRunner.run`. Each command used the same pytest paths and timeout as its
 configured target, with the existing environment's absolute `python -m pytest`
-in place of `uv run pytest`. `PYTHONPATH` selected each copy's `atlas/src`.
+in place of `uv run pytest`. `PYTHONPATH` selected each copy's `matis/src`.
 A complete isolated-copy baseline passed all 2,213 then-current tests before
 mutation execution. No two mutators shared source paths. All 366 restorations
 completed. A fifth copy ran the 13 follow-up mutations and restored all 13.
@@ -144,7 +144,7 @@ index-1318 stab-pattern attribution was wrong; the final test checks exclusion o
 Elixir module attributes instead.
 
 Full command stdout/stderr and original JSONL remain local under
-`/tmp/atlas-mutation-validation/`; they are not committed. The CSV evidence is
+`/tmp/matis-mutation-validation/`; they are not committed. The CSV evidence is
 durable, but those local full logs require separate retention if needed later.
 
 ## Final validation
@@ -152,14 +152,14 @@ durable, but those local full logs require separate retention if needed later.
 All commands ran from the repository root after source restoration:
 
 ```sh
-(cd atlas && uv run pytest -n auto)  # 2,224 passed
-(cd atlas && uv run pyright)        # 0 errors
-(cd atlas && uv run ruff check .)    # passed
+(cd matis && uv run pytest -n auto)  # 2,224 passed
+(cd matis && uv run pyright)        # 0 errors
+(cd matis && uv run ruff check .)    # passed
 (cd dashboard && bun run build)     # passed
 (cd dashboard && bun test)          # 200 passed
 (cd dashboard && bun run typecheck) # passed
 (cd dashboard && bun lint --fix)    # passed; no dashboard diff
-uv run --project atlas atlas check --f . # entire project passed
+uv run --project matis matis check --f . # entire project passed
 ```
 
 No README change, new dependency, or mutation-runner outcome-policy change.

@@ -11,7 +11,7 @@ export function migratedDatabaseFixture() {
   let directory: string
   let template: string
   beforeAll(() => {
-    directory = mkdtempSync(join(tmpdir(), 'atlas-migrated-template-'))
+    directory = mkdtempSync(join(tmpdir(), 'matis-migrated-template-'))
     template = join(directory, 'template.sqlite')
     migrateDatabase(template)
     const database = new Database(template, { readwrite: true, create: false })

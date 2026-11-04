@@ -30,7 +30,7 @@ let service: RepositoryService
 const copyMigratedDatabase = migratedDatabaseFixture()
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'normalized-dashboard-'))
-  path = join(directory, 'atlas.sqlite')
+  path = join(directory, 'matis.sqlite')
   copyMigratedDatabase(path)
   database = new Database(path, {
     readwrite: true,

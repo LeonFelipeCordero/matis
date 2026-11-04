@@ -142,7 +142,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "atlas-rust"
+name = "matis-rust"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -469,10 +469,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "dashboard-atlas-fixture"
+name = "dashboard-matis-fixture"
 version = "0.1.0"
 dependencies = [
- "atlas-rust",
+ "matis-rust",
  "serde_json",
 ]
 

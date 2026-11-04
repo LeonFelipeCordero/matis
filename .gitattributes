@@ -1,2 +1,2 @@
 # Code samples are byte-exact inputs, including CRLF and invalid UTF-8.
-atlas/tests/code_samples/** -text
+matis/tests/code_samples/** -text

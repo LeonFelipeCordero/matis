@@ -8,11 +8,11 @@ Reviewed all 63 survivors in this scope: 50 behavior/test gaps, 5 defensive guar
 
 Added 3 new files, 40 test functions, 124 parametrized cases:
 
-- `atlas/tests/metrics/test_adapter_python_mutation_regressions.py`: Python patterns, parameter counting, class visibility, overload imports, bound self, and both production regressions.
-- `atlas/tests/metrics/test_adapter_script_mutation_regressions.py`: default policy paths/static members, receiver scope boundaries, method isolation, receiver parameters, bounded alias convergence, and TypeScript single-target selection.
-- `atlas/tests/metrics/test_adapter_rust_mutation_regressions.py`: external/inline module directories, path attributes, root inference, import qualification, receiver owners, static guards, struct/call targets, receiver rejection, and import-key fallback.
+- `matis/tests/metrics/test_adapter_python_mutation_regressions.py`: Python patterns, parameter counting, class visibility, overload imports, bound self, and both production regressions.
+- `matis/tests/metrics/test_adapter_script_mutation_regressions.py`: default policy paths/static members, receiver scope boundaries, method isolation, receiver parameters, bounded alias convergence, and TypeScript single-target selection.
+- `matis/tests/metrics/test_adapter_rust_mutation_regressions.py`: external/inline module directories, path attributes, root inference, import qualification, receiver owners, static guards, struct/call targets, receiver rejection, and import-key fallback.
 
-Production edits are limited to `atlas/src/atlas/metrics/adapters/script_python_selection.py`. Descriptor aliases now require a prior visible import. Detached syntax nodes retain conservative fallback behavior. Self assignments now use their lexical binding scope, rather than byte containment alone. Nested local writes no longer reject the outer method. Nested `nonlocal self` writes and comprehension walrus writes still reject it.
+Production edits are limited to `matis/src/matis/metrics/adapters/script_python_selection.py`. Descriptor aliases now require a prior visible import. Detached syntax nodes retain conservative fallback behavior. Self assignments now use their lexical binding scope, rather than byte containment alone. Nested local writes no longer reject the outer method. Nested `nonlocal self` writes and comprehension walrus writes still reject it.
 
 Before the fixes, the first new Python test run had 7 failures and 45 passes. Those failures confirmed unrelated/later descriptor-import pollution and nested-function local self writes. The final new-file run has 124 passes. Existing tests, config, fixtures, snapshots, and README were not edited.
 
@@ -94,7 +94,7 @@ Every index below is **zero-based** in both `results.jsonl` and `manifests.json.
 
 No test or production fix was added for alias shadowing/rebinding beyond the requested lexical visibility/order bug. Unknown decorators remain subject to the existing policy. Nonlocal writes are conservatively rejected even when a more deeply nested binding chain might prove they target another intermediate closure; this preserves rejection rather than introducing unsafe resolution.
 
-No full repository suite, dashboard checks, atlas check, or mutation campaign was run, as requested. The equivalent cases remain un-killed by design. Test assertions target the inspected gaps, but kill counts remain unverified without a later owned mutation run.
+No full repository suite, dashboard checks, matis check, or mutation campaign was run, as requested. The equivalent cases remain un-killed by design. Test assertions target the inspected gaps, but kill counts remain unverified without a later owned mutation run.
 
 ## Validation
 

@@ -41,13 +41,13 @@ function binary(name: string) {
 }
 
 export function rustCli(databasePath: string, ...args: Array<string>) {
-  return run([binary('atlas'), ...args], databasePath)
+  return run([binary('matis'), ...args], databasePath)
 }
 
 export function migrateDatabase(databasePath: string) {
-  run([binary('atlas-migrate')], databasePath)
+  run([binary('matis-migrate')], databasePath)
 }
 
 export function rustFixture(databasePath: string, ...args: Array<string>) {
-  return run([binary('dashboard-atlas-fixture'), ...args], databasePath)
+  return run([binary('dashboard-matis-fixture'), ...args], databasePath)
 }

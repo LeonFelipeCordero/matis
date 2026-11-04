@@ -1,17 +1,17 @@
 [package]
-name = "dashboard-atlas-fixture"
+name = "dashboard-matis-fixture"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 [[bin]]
-name = "atlas"
-path = "../../../atlas-rust/src/atlas/main.rs"
+name = "matis"
+path = "../../../matis-rust/src/matis/main.rs"
 
 [[bin]]
-name = "atlas-migrate"
-path = "../../../atlas-rust/src/atlas/migrate.rs"
+name = "matis-migrate"
+path = "../../../matis-rust/src/matis/migrate.rs"
 
 [dependencies]
-atlas-rust = { path = "../../../atlas-rust" }
+matis-rust = { path = "../../../matis-rust" }
 serde_json = "1"

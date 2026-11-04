@@ -1,0 +1,164 @@
+{
+  "mutations": {
+    "rules": [
+      "arithmetic.add-to-subtract",
+      "arithmetic.subtract-to-add",
+      "arithmetic.multiply-to-divide",
+      "arithmetic.divide-to-multiply",
+      "comparison.equal-to-not-equal",
+      "comparison.not-equal-to-equal",
+      "comparison.less-to-less-equal",
+      "comparison.less-equal-to-less",
+      "comparison.greater-to-greater-equal",
+      "comparison.greater-equal-to-greater",
+      "comparison.less-to-greater",
+      "comparison.greater-to-less",
+      "logical.and-to-or",
+      "logical.or-to-and",
+      "assignment.add-to-subtract",
+      "assignment.subtract-to-add",
+      "assignment.multiply-to-divide",
+      "assignment.divide-to-multiply"
+    ],
+    "targets": {
+      "entrypoints": {
+        "sources": ["matis-rust/src/matis/*.rs", "matis-rust/src/matis/paths/*.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "cli-commands": {
+        "sources": ["matis-rust/src/matis/cli/commands.rs", "matis-rust/src/matis/cli/mod.rs", "matis-rust/src/matis/cli/options.rs", "matis-rust/src/matis/cli/schema.rs", "matis-rust/src/matis/cli/integers.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--", "cli::", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "cli-graph": {
+        "sources": ["matis-rust/src/matis/cli/graph*.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "cli-mutations": {
+        "sources": ["matis-rust/src/matis/cli/mutations.rs", "matis-rust/src/matis/cli/mutation_targets.rs", "matis-rust/src/matis/cli/mutation_run.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "domain-models": {
+        "sources": ["matis-rust/src/matis/domain/mod.rs", "matis-rust/src/matis/domain/models.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "domain-navigation": {
+        "sources": ["matis-rust/src/matis/domain/navigation.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "domain-repositories": {
+        "sources": ["matis-rust/src/matis/domain/repositories.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "mutation-candidates": {
+        "sources": ["matis-rust/src/matis/domain/mutation_candidates.rs", "matis-rust/src/matis/parsing/mutation_candidates.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "discovery": {
+        "sources": ["matis-rust/src/matis/parsing/mod.rs", "matis-rust/src/matis/parsing/discovery*.rs", "matis-rust/src/matis/parsing/ignore_spec.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "parsing": {
+        "sources": ["matis-rust/src/matis/parsing/parser.rs", "matis-rust/src/matis/parsing/structure.rs", "matis-rust/src/matis/parsing/syntax.rs", "matis-rust/src/matis/parsing/catalog.rs", "matis-rust/src/matis/parsing/inheritance.rs", "matis-rust/src/matis/parsing/queries.rs", "matis-rust/src/matis/parsing/adapters/*.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "persistence": {
+        "sources": ["matis-rust/src/matis/persistence/*.rs", "matis-rust/src/matis/persistence/migrations/*.rs", "matis-rust/src/matis/persistence/migrations/versions/*.sql"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "repository-services": {
+        "sources": ["matis-rust/src/matis/services/mod.rs", "matis-rust/src/matis/services/factories.rs", "matis-rust/src/matis/services/repositories.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "navigation-services": {
+        "sources": ["matis-rust/src/matis/services/navigation*.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "mutations": {
+        "sources": ["matis-rust/src/matis/mutations/*.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "artifacts": {
+        "sources": ["matis-rust/src/matis/metrics/mod.rs", "matis-rust/src/matis/metrics/artifact.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "callables": {
+        "sources": ["matis-rust/src/matis/metrics/callables.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "complexity": {
+        "sources": ["matis-rust/src/matis/metrics/complexity.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "checks": {
+        "sources": ["matis-rust/src/matis/metrics/check.rs", "matis-rust/src/matis/metrics/config.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "dependency-metrics": {
+        "sources": ["matis-rust/src/matis/metrics/cycles.rs", "matis-rust/src/matis/metrics/dependency_metrics.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "reports": {
+        "sources": ["matis-rust/src/matis/metrics/report.rs", "matis-rust/src/matis/metrics/report_markdown.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "receivers": {
+        "sources": ["matis-rust/src/matis/metrics/receiver_*.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "resolution": {
+        "sources": ["matis-rust/src/matis/metrics/resolver*.rs", "matis-rust/src/matis/metrics/resolution_*.rs", "matis-rust/src/matis/metrics/pattern_bindings.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      },
+      "metric-adapters": {
+        "sources": ["matis-rust/src/matis/metrics/adapters/*.rs"],
+        "cwd": "matis-rust",
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "timeoutSeconds": 300
+      }
+    }
+  }
+}

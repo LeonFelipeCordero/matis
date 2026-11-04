@@ -19,18 +19,18 @@ Indices below are the original indices from `rerun-mapping.json`, not positions 
 
 ## Checks
 
-Focused command: `cd atlas && uv run pytest tests/metrics/test_adapter_regression_contracts_a.py tests/metrics/test_adapter_regression_syntax_a.py tests/metrics/test_receiver_mutation_regressions.py tests/metrics/test_shared_syntax_mutation_regressions.py tests/metrics/test_receiver_ownership_regressions.py -q` — 157 passed.
+Focused command: `cd matis && uv run pytest tests/metrics/test_adapter_regression_contracts_a.py tests/metrics/test_adapter_regression_syntax_a.py tests/metrics/test_receiver_mutation_regressions.py tests/metrics/test_shared_syntax_mutation_regressions.py tests/metrics/test_receiver_ownership_regressions.py -q` — 157 passed.
 
-Full importer suite: `(cd atlas && uv run pytest -n 4)` — 2220 passed. Four isolated workers were used as permitted by the repository instructions.
+Full importer suite: `(cd matis && uv run pytest -n 4)` — 2220 passed. Four isolated workers were used as permitted by the repository instructions.
 
-`(cd atlas && uv run pyright)` — 0 errors, 0 warnings.
+`(cd matis && uv run pyright)` — 0 errors, 0 warnings.
 
-`(cd atlas && uv run ruff check .)` — passed.
+`(cd matis && uv run ruff check .)` — passed.
 
-`uv run --project atlas atlas check --f .` — passed against the entire shared checkout.
+`uv run --project matis matis check --f .` — passed against the entire shared checkout.
 
-Logs: `followup-metrics-pytest.log`, `followup-metrics-pyright.log`, `followup-metrics-ruff.log`, and `followup-metrics-atlas-check.log` in this directory.
+Logs: `followup-metrics-pytest.log`, `followup-metrics-pyright.log`, `followup-metrics-ruff.log`, and `followup-metrics-matis-check.log` in this directory.
 
-All five owned files remain below 600 lines. Added functions stay below 100 lines, three parameters, and complexity eight; the whole-project Atlas check passes.
+All five owned files remain below 600 lines. Added functions stay below 100 lines, three parameters, and complexity eight; the whole-project Matis check passes.
 
 No mutation rerun was performed. The recorded outcomes remain the historical survived/timeout outcomes above. Dashboard checks were not run for this Python-test-only follow-up.

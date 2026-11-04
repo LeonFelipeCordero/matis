@@ -30,7 +30,7 @@ jobs:
       contents: write
     # Serialize version selection and publication. Do not cancel a running release.
     concurrency:
-      group: atlas-release
+      group: matis-release
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -44,29 +44,29 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: atlas-rust
+          workspaces: matis-rust
       - name: Select and stamp release version
         id: version
         run: |
           version=$(python .github/scripts/release_version.py)
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - run: cargo fmt --manifest-path atlas-rust/Cargo.toml --check
-      - run: cargo test --manifest-path atlas-rust/Cargo.toml --locked --all-targets
-      - run: cargo clippy --manifest-path atlas-rust/Cargo.toml --locked --all-targets -- -D warnings
-      - run: cargo build --manifest-path atlas-rust/Cargo.toml --release --locked --bins
+      - run: cargo fmt --manifest-path matis-rust/Cargo.toml --check
+      - run: cargo test --manifest-path matis-rust/Cargo.toml --locked --all-targets
+      - run: cargo clippy --manifest-path matis-rust/Cargo.toml --locked --all-targets -- -D warnings
+      - run: cargo build --manifest-path matis-rust/Cargo.toml --release --locked --bins
       - name: Check repository and binary version
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          test "$(atlas-rust/target/release/atlas --version)" = "atlas $VERSION"
-          atlas-rust/target/release/atlas check --f .
+          test "$(matis-rust/target/release/matis --version)" = "matis $VERSION"
+          matis-rust/target/release/matis check --f .
       - name: Package binaries
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir dist
-          tar -czf "dist/atlas-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
-            -C atlas-rust/target/release atlas atlas-migrate \
+          tar -czf "dist/matis-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            -C matis-rust/target/release matis matis-migrate \
             -C "$GITHUB_WORKSPACE" LICENSE
           cd dist
           sha256sum *.tar.gz > SHA256SUMS

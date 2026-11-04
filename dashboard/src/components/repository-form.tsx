@@ -42,7 +42,7 @@ export function RepositoryForm({ onCreated }: { onCreated: () => void }) {
           <Input
             id="repository-name"
             name="name"
-            placeholder="e.g. atlas"
+            placeholder="e.g. matis"
             required
             maxLength={200}
             value={name}

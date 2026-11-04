@@ -6,7 +6,7 @@ product
 
 ## Users and purpose
 
-Engineers exploring unfamiliar code during ordinary daytime development. Atlas helps them understand internal dependencies in a repository, starting with an adaptive folder overview and drilling through folders at any depth, files, and functions.
+Engineers exploring unfamiliar code during ordinary daytime development. Matis helps them understand internal dependencies in a repository, starting with an adaptive folder overview and drilling through folders at any depth, files, and functions.
 
 ## Scope
 

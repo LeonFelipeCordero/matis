@@ -32,7 +32,7 @@ def stamp_version(manifest, lockfile, version):
     lock = lockfile.read_text()
     old_package = f'name = "{package["name"]}"\nversion = "{package["version"]}"'
     if lock.count(old_package) != 1:
-        raise ValueError("Cargo.lock must contain exactly one matching Atlas package")
+        raise ValueError("Cargo.lock must contain exactly one matching Matis package")
     updated = source.replace(f'version = "{package["version"]}"', f'version = "{version}"', 1)
     if tomllib.loads(updated)["package"]["version"] != version:
         raise ValueError("Could not update the package version")
@@ -41,12 +41,12 @@ def stamp_version(manifest, lockfile, version):
 
 
 def main():
-    manifest = Path("atlas-rust/Cargo.toml")
+    manifest = Path("matis-rust/Cargo.toml")
     base = tomllib.loads(manifest.read_text())["package"]["version"]
     tags = subprocess.check_output(["git", "tag", "--list"], text=True).splitlines()
     current = subprocess.check_output(["git", "tag", "--points-at", "HEAD"], text=True).splitlines()
     version = next_version(base, tags, current)
-    stamp_version(manifest, Path("atlas-rust/Cargo.lock"), version)
+    stamp_version(manifest, Path("matis-rust/Cargo.lock"), version)
     print(version)
 
 

@@ -6,11 +6,11 @@ Indices below are **zero-based JSONL record indices**, not the one-based progres
 
 The campaign finished: 1584 records, 1373 killed, 203 survived, 8 timeout. `progress.log` ends with `Completed 1584 mutations in 15588.07s`; it contains exactly 1584 `Source restored:` messages. This review did not execute any mutator. Existing campaign outcomes remain unchanged; added tests are not a rerun score.
 
-There are 58 survivors outside metrics/adapters and receiver/resolution files. New tests address 48 distinguishable behavior gaps. Ten survivors have valid-grammar equivalence/reachability limits documented below. All 37 tail survivors are accounted for. No production bug was confirmed. No production source, existing test, or atlas.json was changed by this work. Other workers have concurrent changes in metrics adapters and receiver files; those are not part of this work.
+There are 58 survivors outside metrics/adapters and receiver/resolution files. New tests address 48 distinguishable behavior gaps. Ten survivors have valid-grammar equivalence/reachability limits documented below. All 37 tail survivors are accounted for. No production bug was confirmed. No production source, existing test, or matis.json was changed by this work. Other workers have concurrent changes in metrics adapters and receiver files; those are not part of this work.
 
 ## New test files and survivor mapping
 
-Paths below are under `atlas/tests/`. Test names are exact; parameterized cases cover independent conditions.
+Paths below are under `matis/tests/`. Test names are exact; parameterized cases cover independent conditions.
 
 | Indices | New file and test | Contract |
 |---|---|---|
@@ -99,6 +99,6 @@ Raw campaign killed count is 1373. Excluding these six operationally invalid/har
 
 Dashboard production build, tests, typecheck, and lint --fix pass (`other-dashboard-*.log`). No frontend source was changed, so no browser check was needed.
 
-Entire-project `atlas check --f .` was run twice. The final findings are recorded in `other-atlas-check-final.log`; none refer to these five new files. Existing/concurrent metrics adapter/receiver complexity and other workers' test parameter counts remain outside this work's ownership.
+Entire-project `matis check --f .` was run twice. The final findings are recorded in `other-matis-check-final.log`; none refer to these five new files. Existing/concurrent metrics adapter/receiver complexity and other workers' test parameter counts remain outside this work's ownership.
 
-No atlas.json edits, no existing-test edits, no production fixes, no mutator execution, and no commit. Mutation kill effectiveness is based on source/contract review only; it was not remeasured.
+No matis.json edits, no existing-test edits, no production fixes, no mutator execution, and no commit. Mutation kill effectiveness is based on source/contract review only; it was not remeasured.
