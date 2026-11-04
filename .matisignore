@@ -1,0 +1,7 @@
+# Application samples and generated baselines are inputs, not implementation.
+# Analyzing a sample project directly still includes all of its files.
+/matis-rust/tests/code_samples/
+/matis-rust/tests/snapshots/
+
+# Check the dashboard separately with its TypeScript tools.
+/dashboard/

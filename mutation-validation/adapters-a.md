@@ -5,10 +5,10 @@ Scope: NEW tests only for base, callable_selection, elixir, generic, go, javascr
 Indices below are exact **zero-based full-run results.jsonl record indices**, joined to baseline manifests.json by manifestId; source lines are baseline one-based span.startLine. Reviewed all 44 assigned survivors.
 
 New files:
-- atlas/tests/metrics/test_adapter_regression_syntax_a.py
-- atlas/tests/metrics/test_adapter_regression_contracts_a.py
+- matis/tests/metrics/test_adapter_regression_syntax_a.py
+- matis/tests/metrics/test_adapter_regression_contracts_a.py
 
-Validation: `cd atlas && uv run pytest tests/metrics/test_adapter_regression_syntax_a.py tests/metrics/test_adapter_regression_contracts_a.py -q` — 72 passed in 0.21s. Ruff format/check limited to these new files passed. No existing tests, full suite, typecheck, atlas check, dashboard checks, or mutation execution were run, as requested.
+Validation: `cd matis && uv run pytest tests/metrics/test_adapter_regression_syntax_a.py tests/metrics/test_adapter_regression_contracts_a.py -q` — 72 passed in 0.21s. Ruff format/check limited to these new files passed. No existing tests, full suite, typecheck, matis check, dashboard checks, or mutation execution were run, as requested.
 
 “Coverage added” means a passing baseline assertion exercises the relevant contract; it is NOT a verified mutation kill. No survivor is claimed fixed without a rerun. Indices 87, 110, 248 are explicitly not claimed covered against their mutations.
 

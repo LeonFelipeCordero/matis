@@ -1,7 +1,0 @@
-# Application samples and generated baselines are inputs, not implementation.
-# Analyzing a sample project directly still includes all of its files.
-/atlas-rust/tests/code_samples/
-/atlas-rust/tests/snapshots/
-
-# Check the dashboard separately with its TypeScript tools.
-/dashboard/

@@ -5,13 +5,13 @@ on:
     branches: [main]
     paths:
       - dashboard/**
-      - atlas-rust/**
+      - matis-rust/**
       - .github/workflows/dashboard-ci.yml
   push:
     branches: [main]
     paths:
       - dashboard/**
-      - atlas-rust/**
+      - matis-rust/**
       - .github/workflows/dashboard-ci.yml
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            atlas-rust
+            matis-rust
             dashboard/tests/rust-fixture
       - uses: oven-sh/setup-bun@v2
         with:

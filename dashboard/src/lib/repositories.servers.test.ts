@@ -47,7 +47,7 @@ function ready(
 const fileView = (id: string, key = 'file:main.py') =>
   ready(id, { kind: 'file', key })
 
-const atlas = (...args: Array<string>) => rustCli(path, ...args)
+const matis = (...args: Array<string>) => rustCli(path, ...args)
 
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'shared-graph-database-'))
@@ -150,12 +150,12 @@ test('Rust indexes repositories registered by the UI, and the UI sees reindex wr
     { name: 'Shared', location: source },
     database,
   )
-  const summary = JSON.parse(atlas('index', '-f', source))
+  const summary = JSON.parse(matis('index', '-f', source))
   const first = fileView(repository.id)
   expect(summary.repositoryId).toBe(repository.id)
   expect(first.graph.nodes.some((node) => node.label === 'run')).toBe(true)
   writeFileSync(file, 'def replacement():\n    return 2\n')
-  atlas('index', '-f', source)
+  matis('index', '-f', source)
   const replacement = fileView(repository.id)
   expect(
     replacement.graph.nodes.some((node) => node.label === 'replacement'),
@@ -181,7 +181,7 @@ test('Rust indexes repositories registered by the UI, and the UI sees reindex wr
     database,
   )
   writeFileSync(join(otherSource, 'main.py'), 'def id_named():\n    return 3\n')
-  const selected = JSON.parse(atlas('index', '-f', otherSource))
+  const selected = JSON.parse(matis('index', '-f', otherSource))
   expect(selected.repositoryId).toBe(idNamed.id)
   const idNamedGraph = fileView(idNamed.id)
   expect(
@@ -206,7 +206,7 @@ test('folder reports register and update graphs visible to the UI', () => {
   mkdirSync(source)
   const file = join(source, 'main.py')
   writeFileSync(file, 'def first():\n    return 1\n')
-  atlas('report', '-f', source, '--save')
+  matis('report', '-f', source, '--save')
   const repository = listRepositories(database)[0]
   expect(repository.name).toBe('source')
   expect(repository.location).toBe(source)
@@ -214,7 +214,7 @@ test('folder reports register and update graphs visible to the UI', () => {
     fileView(repository.id).graph.nodes.some((node) => node.label === 'first'),
   ).toBe(true)
   writeFileSync(file, 'def replacement():\n    return 2\n')
-  atlas('report', '--f', source, '--save')
+  matis('report', '--f', source, '--save')
   expect(listRepositories(database)).toHaveLength(1)
   expect(
     fileView(repository.id).graph.nodes.some(
@@ -233,7 +233,7 @@ test('Python src imports become dashboard arrows even when the report has no fin
     'from app import worker as w\ndef run():\n    w.work()\n',
   )
   writeFileSync(join(app, 'worker.py'), 'def work(): pass\n')
-  atlas('report', '-f', source, '--save')
+  matis('report', '-f', source, '--save')
   const repository = listRepositories(database)[0]
   const { graph } = ready(repository.id, {
     kind: 'folder',
@@ -259,7 +259,7 @@ test('indexed metrics survive Rust/Bun storage and keep hidden test dependents',
     join(source, 'test_main.py'),
     'from main import main\ndef test_main():\n    return main()\n',
   )
-  atlas('report', '-f', source, '--save')
+  matis('report', '-f', source, '--save')
   const repository = listRepositories(database)[0]
   const view = ready(repository.id)
   const core = view.details.nodes.find((node) => node.name === 'core.py')!
@@ -308,7 +308,7 @@ test('one read transaction keeps metadata and nodes on one WAL snapshot', () => 
   mkdirSync(source)
   const file = join(source, 'main.py')
   writeFileSync(file, 'def before(): return 1\n')
-  atlas('index', '-f', source)
+  matis('index', '-f', source)
   const repository = listRepositories(database)[0]
   const before = fileView(repository.id)
   writeFileSync(file, 'def after(): return 2\n')
@@ -326,7 +326,7 @@ test('one read transaction keeps metadata and nodes on one WAL snapshot', () => 
       sql.includes('from "graph_nodes" left join "graph_symbols"')
     ) {
       interleaved = true
-      atlas('index', '-f', source)
+      matis('index', '-f', source)
     }
     return original.call(this, sql)
   } as typeof original)

@@ -4,12 +4,12 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - atlas-rust/**
+      - matis-rust/**
       - .github/workflows/rust-ci.yml
   push:
     branches: [main]
     paths:
-      - atlas-rust/**
+      - matis-rust/**
       - .github/workflows/rust-ci.yml
 
 permissions:
@@ -28,9 +28,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: atlas-rust
-      - run: cargo test --manifest-path atlas-rust/Cargo.toml --locked --all-targets
-      - run: cargo build --manifest-path atlas-rust/Cargo.toml --release --locked --bins
+          workspaces: matis-rust
+      - run: cargo test --manifest-path matis-rust/Cargo.toml --locked --all-targets
+      - run: cargo build --manifest-path matis-rust/Cargo.toml --release --locked --bins
 
   checks:
     name: Checks
@@ -42,6 +42,6 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: atlas-rust
-      - run: cargo fmt --manifest-path atlas-rust/Cargo.toml --check
-      - run: cargo clippy --manifest-path atlas-rust/Cargo.toml --locked --all-targets -- -D warnings
+          workspaces: matis-rust
+      - run: cargo fmt --manifest-path matis-rust/Cargo.toml --check
+      - run: cargo clippy --manifest-path matis-rust/Cargo.toml --locked --all-targets -- -D warnings

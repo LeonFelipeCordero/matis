@@ -8,7 +8,7 @@ The indices below are exact, zero-based indices into `results.jsonl` and `manife
 
 Nested Python function-local `self` assignment also invalidated an outer `self.run()`. There are two independent scans. This work fixes `ReceiverTypes._path_written` by excluding nested function-local identifier assignments from write targets, but not from alias discovery. It retains nonlocal/global assignments and member writes, including writes through aliases created inside nested functions. The other agent's concurrent `script_python_selection.py` change fixes its independent lexical-owner check. This work did not edit that file. The full real-parser regressions depend on both fixes.
 
-Only `atlas/src/atlas/metrics/receiver_resolution.py` was changed by this work. New test files are `atlas/tests/metrics/test_receiver_ownership_regressions.py`, `test_receiver_mutation_regressions.py`, and `test_shared_syntax_mutation_regressions.py`. No existing test or configuration file was edited.
+Only `matis/src/matis/metrics/receiver_resolution.py` was changed by this work. New test files are `matis/tests/metrics/test_receiver_ownership_regressions.py`, `test_receiver_mutation_regressions.py`, and `test_shared_syntax_mutation_regressions.py`. No existing test or configuration file was edited.
 
 ## Exact survivor classification
 

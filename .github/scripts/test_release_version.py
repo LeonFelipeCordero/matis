@@ -26,12 +26,12 @@ class ReleaseVersionTests(unittest.TestCase):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 semver(version)
 
-    def test_stamp_updates_only_atlas_package(self):
+    def test_stamp_updates_only_matis_package(self):
         with tempfile.TemporaryDirectory() as directory:
             manifest = Path(directory) / "Cargo.toml"
             lockfile = Path(directory) / "Cargo.lock"
-            manifest.write_text('[package]\nname = "atlas-rust"\nversion = "0.1.0"\n\n[dependencies]\nother = { version = "0.1.0" }\n')
-            lockfile.write_text('version = 4\n\n[[package]]\nname = "atlas-rust"\nversion = "0.1.0"\n\n[[package]]\nname = "other"\nversion = "0.1.0"\n')
+            manifest.write_text('[package]\nname = "matis-rust"\nversion = "0.1.0"\n\n[dependencies]\nother = { version = "0.1.0" }\n')
+            lockfile.write_text('version = 4\n\n[[package]]\nname = "matis-rust"\nversion = "0.1.0"\n\n[[package]]\nname = "other"\nversion = "0.1.0"\n')
             stamp_version(manifest, lockfile, "0.1.1")
             self.assertEqual(tomllib.loads(manifest.read_text())["package"]["version"], "0.1.1")
             self.assertEqual(tomllib.loads(manifest.read_text())["dependencies"]["other"]["version"], "0.1.0")
@@ -41,7 +41,7 @@ class ReleaseVersionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             manifest = Path(directory) / "Cargo.toml"
             lockfile = Path(directory) / "Cargo.lock"
-            original = '[package]\nname = "atlas-rust"\nversion = "0.1.0"\n'
+            original = '[package]\nname = "matis-rust"\nversion = "0.1.0"\n'
             manifest.write_text(original)
             lockfile.write_text("version = 4\n")
             with self.assertRaises(ValueError):

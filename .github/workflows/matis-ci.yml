@@ -1,0 +1,31 @@
+name: Matis CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matis:
+    name: Matis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: matis-rust
+      - run: cargo build --manifest-path matis-rust/Cargo.toml --release --locked --bins
+      - name: Require all configured checks to pass across the entire repository
+        shell: bash
+        run: |
+          set -o pipefail
+          matis-rust/target/release/matis check --f . --format json | tee "$RUNNER_TEMP/matis-check.json"

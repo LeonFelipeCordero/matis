@@ -5,7 +5,7 @@
 The deleted Python suite separated unit tests by production module. The Rust suite now uses the same folder structure without adding a mocking dependency or exposing private APIs.
 
 ```text
-atlas-rust/tests/
+matis-rust/tests/
   unit/
     cli/                  # Direct schema and option parsing
     parsing/adapters/     # Record assembly, policy, and syntax contracts
@@ -38,30 +38,30 @@ The former 15 external test binaries are now two. This reduces separate compilat
 Run from the repository root. Fast development suite:
 
 ```sh
-cargo test --manifest-path atlas-rust/Cargo.toml --locked --lib --test unit -- --skip integration_tests
+cargo test --manifest-path matis-rust/Cargo.toml --locked --lib --test unit -- --skip integration_tests
 ```
 
 Focused CLI or parsing unit tests:
 
 ```sh
-cargo test --manifest-path atlas-rust/Cargo.toml --locked --lib cli:: -- --skip integration_tests
-cargo test --manifest-path atlas-rust/Cargo.toml --locked --lib parsing:: -- --skip integration_tests
+cargo test --manifest-path matis-rust/Cargo.toml --locked --lib cli:: -- --skip integration_tests
+cargo test --manifest-path matis-rust/Cargo.toml --locked --lib parsing:: -- --skip integration_tests
 ```
 
 Public integration contracts, optionally filtered to one layer:
 
 ```sh
-cargo test --manifest-path atlas-rust/Cargo.toml --locked --test integration
-cargo test --manifest-path atlas-rust/Cargo.toml --locked --test integration -- services::
+cargo test --manifest-path matis-rust/Cargo.toml --locked --test integration
+cargo test --manifest-path matis-rust/Cargo.toml --locked --test integration -- services::
 ```
 
 `--test integration` does not include private library integration tests. Run the complete suite before completion:
 
 ```sh
-cargo test --manifest-path atlas-rust/Cargo.toml --locked --all-targets
+cargo test --manifest-path matis-rust/Cargo.toml --locked --all-targets
 ```
 
-Mutation targets in `atlas.json` use the new entry points and module filters. They retain their previous integration groups. Their commands also run library tests; they do not use the fast suite's integration exclusion.
+Mutation targets in `matis.json` use the new entry points and module filters. They retain their previous integration groups. Their commands also run library tests; they do not use the fast suite's integration exclusion.
 
 ## Measurements
 
@@ -80,4 +80,4 @@ Timing varies with machine load. The fast command deliberately runs less than th
 
 ## Validation
 
-Passed: all Rust targets, release binaries, formatting, Clippy with warnings denied, and whole-repository Atlas analysis. An independent review checked the moved assertions and mutation filters. No mutation campaign ran. Dashboard checks were not needed because dashboard code and shared output contracts did not change.
+Passed: all Rust targets, release binaries, formatting, Clippy with warnings denied, and whole-repository Matis analysis. An independent review checked the moved assertions and mutation filters. No mutation campaign ran. Dashboard checks were not needed because dashboard code and shared output contracts did not change.

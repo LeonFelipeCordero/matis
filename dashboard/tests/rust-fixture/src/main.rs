@@ -1,4 +1,4 @@
-use atlas::{
+use matis::{
     domain::repositories::RepositoryProtocol, persistence::repositories::repository_store,
 };
 use serde_json::Value;
@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     let output = match args.as_slice() {
         [command, source] if command == "analyze" => {
-            atlas::services::repositories::analyze_folder(Path::new(source))?
+            matis::services::repositories::analyze_folder(Path::new(source))?
         }
         [command, file, name] if command == "save" => {
             let artifact: Value = serde_json::from_str(&fs::read_to_string(file)?)?;
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         [command, file] if command == "cycles" => {
             let artifact: Value = serde_json::from_str(&fs::read_to_string(file)?)?;
-            atlas::metrics::cycles::circular_dependencies(
+            matis::metrics::cycles::circular_dependencies(
                 artifact["nodes"]
                     .as_array()
                     .ok_or("nodes must be an array")?,

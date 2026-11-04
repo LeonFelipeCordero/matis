@@ -6,7 +6,7 @@ import { buildRustCli } from '../tests/rust-cli'
 // Compile once before tests start, outside their per-test time limits.
 buildRustCli()
 
-const directory = mkdtempSync(join(tmpdir(), 'atlas-test-'))
+const directory = mkdtempSync(join(tmpdir(), 'matis-test-'))
 
 process.env.DATABASE_PATH = join(directory, 'db')
 process.on('exit', () => rmSync(directory, { recursive: true, force: true }))

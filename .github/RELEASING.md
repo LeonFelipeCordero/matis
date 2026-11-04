@@ -1,8 +1,8 @@
 # Binary releases
 
 Pushes to `main` run `.github/workflows/release.yml`. The workflow tests the
-version script, stamps the release version, runs the Rust checks and Atlas,
-then publishes both `atlas` and `atlas-migrate` in a GitHub Release.
+version script, stamps the release version, runs the Rust checks and Matis,
+then publishes both `matis` and `matis-migrate` in a GitHub Release.
 No crates.io publication or additional Rust dependency is needed.
 
 The initial platform is Linux x86-64 with glibc 2.35 or newer (Ubuntu 22.04 or
@@ -10,22 +10,22 @@ newer). Alpine/musl, ARM, macOS, and Windows binaries are not included.
 
 ## Versions
 
-The first release uses the package version in `atlas-rust/Cargo.toml`, currently
+The first release uses the package version in `matis-rust/Cargo.toml`, currently
 `0.1.0`. Each subsequent release increments the highest stable `vMAJOR.MINOR.PATCH`
 tag's patch number. Unrelated tags and prerelease tags do not affect this count.
 Rerunning a workflow for an already tagged commit reuses its version.
 
 For a feature or breaking change, update the package version in
-`atlas-rust/Cargo.toml` and its package entry in `atlas-rust/Cargo.lock` to a
+`matis-rust/Cargo.toml` and its package entry in `matis-rust/Cargo.lock` to a
 version greater than the latest release. The next release uses that version.
 Version increments do not infer compatibility from code or commit messages.
 
 Release tags point to the pushed source commit. The workflow stamps Cargo.toml
 and Cargo.lock in the build checkout only; it does not commit version changes
-to `main`. Thus `atlas --version` in a release binary matches the tag, while a
+to `main`. Thus `matis --version` in a release binary matches the tag, while a
 local source build reports the manifest baseline. To reproduce a release build,
 check out its tag, run `python3 .github/scripts/release_version.py` with Python
-3.11 or newer, then build with `cargo build --manifest-path atlas-rust/Cargo.toml
+3.11 or newer, then build with `cargo build --manifest-path matis-rust/Cargo.toml
 --release --locked --bins`.
 
 The workflow needs GitHub Actions enabled and permission to create tags and
@@ -45,27 +45,27 @@ Pin a release rather than downloading `latest`. This example requires GitHub CLI
 and a Linux x86-64 runner compatible with Ubuntu 22.04:
 
 ```yaml
-- name: Install Atlas
+- name: Install Matis
   env:
     GH_TOKEN: ${{ github.token }}
-    ATLAS_VERSION: v0.1.0
+    MATIS_VERSION: v0.1.0
   shell: bash
   run: |
-    mkdir -p "$RUNNER_TEMP/atlas-download" "$RUNNER_TEMP/atlas-bin"
-    cd "$RUNNER_TEMP/atlas-download"
-    gh release download "$ATLAS_VERSION" \
-      --repo LeonFelipeCordero/atlas \
-      --pattern 'atlas-*-x86_64-unknown-linux-gnu.tar.gz' \
+    mkdir -p "$RUNNER_TEMP/matis-download" "$RUNNER_TEMP/matis-bin"
+    cd "$RUNNER_TEMP/matis-download"
+    gh release download "$MATIS_VERSION" \
+      --repo LeonFelipeCordero/matis \
+      --pattern 'matis-*-x86_64-unknown-linux-gnu.tar.gz' \
       --pattern SHA256SUMS
     sha256sum --check SHA256SUMS
-    tar -xzf atlas-*-x86_64-unknown-linux-gnu.tar.gz -C "$RUNNER_TEMP/atlas-bin"
-    echo "$RUNNER_TEMP/atlas-bin" >> "$GITHUB_PATH"
-- run: atlas --version
-- run: atlas check --f .
+    tar -xzf matis-*-x86_64-unknown-linux-gnu.tar.gz -C "$RUNNER_TEMP/matis-bin"
+    echo "$RUNNER_TEMP/matis-bin" >> "$GITHUB_PATH"
+- run: matis --version
+- run: matis check --f .
 ```
 
 No Rust toolchain is needed in the consuming project. Checks without `--save`
-do not need a database. Run `atlas-migrate` before commands that persist data;
+do not need a database. Run `matis-migrate` before commands that persist data;
 back up an existing database before upgrading.
 
 ## Local workflow checks

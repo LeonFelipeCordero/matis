@@ -1,5 +1,5 @@
 {
-  "name": "atlas",
+  "name": "matis",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,8 +11,8 @@
     "lint": "eslint",
     "format": "prettier",
     "check": "prettier --write . && eslint --fix",
-    "db:migrate": "cargo run --manifest-path ../atlas-rust/Cargo.toml --locked --bin atlas-migrate --",
-    "architecture:index": "cargo run --manifest-path ../atlas-rust/Cargo.toml --locked --bin atlas -- index",
+    "db:migrate": "cargo run --manifest-path ../matis-rust/Cargo.toml --locked --bin matis-migrate --",
+    "architecture:index": "cargo run --manifest-path ../matis-rust/Cargo.toml --locked --bin matis -- index",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

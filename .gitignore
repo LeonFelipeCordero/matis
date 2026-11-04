@@ -219,7 +219,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Atlas: dependencies, generated output, local data and lockfiles
+# Matis: dependencies, generated output, local data and lockfiles
 node_modules/
 .output/
 .tanstack/
@@ -235,9 +235,9 @@ graphs/
 *.tsbuildinfo
 *.lock
 *.lockb
-!atlas-rust/Cargo.lock
+!matis-rust/Cargo.lock
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
-/atlas/coffee.json
+/matis/coffee.json
 /dashboard/src/routeTree.gen.ts

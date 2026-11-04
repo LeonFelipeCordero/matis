@@ -16,7 +16,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       meta: [
         { charSet: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { title: 'Atlas · Repository graphs' },
+        { title: 'Matis · Repository graphs' },
         {
           name: 'description',
           content:
@@ -71,11 +71,11 @@ function RootComponent() {
         Skip to content
       </a>
       <header className="app-header">
-        <Link to="/" className="brand" aria-label="Atlas">
+        <Link to="/" className="brand" aria-label="Matis">
           <span className="brand-mark">
             <Network size={21} />
           </span>
-          Atlas
+          Matis
         </Link>
         <Link to="/" className="header-link">
           Repositories

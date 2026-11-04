@@ -44,7 +44,7 @@ let imported: Artifact | undefined
 /** Projection-only fixture from the real Rust analyzer; no persisted JSON export. */
 export function importedArtifact(): Artifact {
   if (imported) return imported
-  const directory = mkdtempSync(join(tmpdir(), 'atlas-language-fixture-'))
+  const directory = mkdtempSync(join(tmpdir(), 'matis-language-fixture-'))
   const source = join(directory, 'source')
   try {
     for (const [path, content] of Object.entries(samples)) {

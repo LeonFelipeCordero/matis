@@ -4,7 +4,7 @@ Baseline indices below come from `manifests.json`, joined by originalIndex/fresh
 
 ## Changes
 
-Only `atlas/tests/parsing/test_campaign_core_regressions.py` changed. The adapter regression file needed no change. No production, configuration, README, or other test edits. No commit.
+Only `matis/tests/parsing/test_campaign_core_regressions.py` changed. The adapter regression file needed no change. No production, configuration, README, or other test edits. No commit.
 
 | Exact baseline indices | Classification | Evidence and test |
 | --- | --- | --- |
@@ -37,13 +37,13 @@ No new artificial tests for these exact indices. Reasons remain scoped to valid 
 
 All commands ran from the repository root against the shared checkout, without a mutator:
 
-- `(cd atlas && uv run pytest tests/parsing/test_campaign_core_regressions.py tests/parsing/test_campaign_adapter_regressions.py)` — 51 passed.
-- `(cd atlas && uv run pytest -n auto)` — 2223 passed. Log: `followup-parsing-pytest.log`.
-- `(cd atlas && uv run pyright)` — 0 errors, warnings, or informations. Log: `followup-parsing-pyright.log`.
-- `(cd atlas && uv run ruff check .)` — passed. Log: `followup-parsing-ruff.log`.
-- `uv run --project atlas atlas check --f .` — whole-project analysis passed. Log: `followup-parsing-atlas-check.log`.
+- `(cd matis && uv run pytest tests/parsing/test_campaign_core_regressions.py tests/parsing/test_campaign_adapter_regressions.py)` — 51 passed.
+- `(cd matis && uv run pytest -n auto)` — 2223 passed. Log: `followup-parsing-pytest.log`.
+- `(cd matis && uv run pyright)` — 0 errors, warnings, or informations. Log: `followup-parsing-pyright.log`.
+- `(cd matis && uv run ruff check .)` — passed. Log: `followup-parsing-ruff.log`.
+- `uv run --project matis matis check --f .` — whole-project analysis passed. Log: `followup-parsing-matis-check.log`.
 - Dashboard production build, `bun test` (200 passed), `bun run typecheck`, and `bun lint --fix` — passed. Log: `followup-parsing-dashboard.log`.
 
-Logs are under `/tmp/atlas-mutation-validation/`. The changed test file remains below 600 lines; all its functions remain below 100 lines, at most three parameters, and complexity below eight.
+Logs are under `/tmp/matis-mutation-validation/`. The changed test file remains below 600 lines; all its functions remain below 100 lines, at most three parameters, and complexity below eight.
 
 No frontend behavior changed, so no browser smoke check was needed. Existing shared-checkout changes were left untouched. Remaining risk: target correction and an actual later mutation rerun must confirm outcomes, especially the incorrect previous attribution for 1318.
