@@ -165,6 +165,18 @@ pub fn build_check(report: &Value, config: &Value) -> Result<Value> {
         findings.push(json!({"rule": "analysis", "metric": "parseError", "subject": "Analysis incomplete",
             "files": [{"path": diagnostic["path"]}], "actual": null, "limit": null, "details": [diagnostic["message"]]}));
     }
+    for finding in &mut findings {
+        let rule = finding["rule"].as_str().unwrap();
+        finding["helpUrl"] = config["helpLinks"][rule].as_str().map_or_else(
+            || {
+                json!(format!(
+                    "https://github.com/LeonFelipeCordero/matis/blob/main/docs/check-fixes.md#{}",
+                    rule.to_lowercase()
+                ))
+            },
+            |url| json!(url),
+        );
+    }
     Ok(json!({"findings": findings}))
 }
 
@@ -182,11 +194,29 @@ fn finding_section(finding: &Value) -> String {
     for detail in finding["details"].as_array().into_iter().flatten() {
         rows.push(format!("- {}", detail.as_str().unwrap_or("")));
     }
+    if let Some(url) = finding["helpUrl"].as_str() {
+        let link = if url::Url::parse(url).is_ok_and(|parsed| matches!(parsed.host(), Some(url::Host::Ipv6(_)))) {
+            // CommonMark renderers percent-encode IPv6 host brackets in Markdown links.
+            let escaped = url
+                .replace('&', "&amp;")
+                .replace('<', "&lt;")
+                .replace('>', "&gt;")
+                .replace('"', "&quot;")
+                .replace('\'', "&#39;");
+            // Entities prevent Markdown formatting and GFM autolinks inside the HTML anchor.
+            let text: String = url.chars().map(|ch| format!("&#{};", u32::from(ch))).collect();
+            format!("<a href=\"{escaped}\">{text}</a>")
+        } else {
+            format!("<{url}>")
+        };
+        rows.push(format!("\nHow to fix: {link}"));
+    }
     rows.join("\n")
 }
 
 /// Format check findings as Markdown, or return `All checks passed.` when none exist.
 /// Missing or non-array `findings` is treated as empty.
+/// Clickable IPv6 help links require renderer support for inline HTML.
 pub fn render_check(check: &Value) -> String {
     let findings = check["findings"].as_array().map(Vec::as_slice).unwrap_or_default();
     if findings.is_empty() {
