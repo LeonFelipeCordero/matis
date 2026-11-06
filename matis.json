@@ -1,4 +1,7 @@
 {
+  "maxFanIn": 30,
+  "maxFanOut": 20,
+  "fanExclude": ["/matis-rust/src/matis/syntax.rs"],
   "mutations": {
     "rules": [
       "arithmetic.add-to-subtract",
