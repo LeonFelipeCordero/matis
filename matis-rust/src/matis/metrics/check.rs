@@ -2,6 +2,7 @@ use super::{
     config::{integer_text, validate_config},
     report_markdown::{code, location, metric_label, value_text},
 };
+use crate::parsing::ignore_spec::IgnoreSpec;
 use anyhow::{Result, anyhow};
 use serde_json::{Value, json};
 use std::{cmp::Ordering, collections::BTreeSet};
@@ -14,6 +15,7 @@ const RULES: [(&str, &str, &[&str]); 6] = [
     ("maxDecisionDepth", "maxDecisionDepth", &["function", "method"]),
     ("maxNestedLoops", "nestedLoops", &["function", "method"]),
 ];
+const FAN_RULES: [(&str, &str); 2] = [("maxFanIn", "fanIn"), ("maxFanOut", "fanOut")];
 const DEPENDENCY_RULES: [(&str, &str); 2] =
     [("maxChangeImpact", "transitiveChangeImpact"), ("maxInstability", "instability")];
 
@@ -75,7 +77,11 @@ fn integer_parts(text: &str) -> (bool, &str) {
     (text.starts_with('-'), digits)
 }
 
-fn enabled_limits<'a>(node: &Value, config: &'a Value) -> Vec<(&'static str, &'static str, &'a Value)> {
+fn enabled_limits<'a>(
+    node: &Value,
+    config: &'a Value,
+    fan_exclude: &IgnoreSpec,
+) -> Vec<(&'static str, &'static str, &'a Value)> {
     let kind = node["kind"].as_str().unwrap_or("");
     let mut rules: Vec<_> = RULES
         .into_iter()
@@ -85,11 +91,14 @@ fn enabled_limits<'a>(node: &Value, config: &'a Value) -> Vec<(&'static str, &'s
     if node["level"] == "module" || node["level"] == "file" {
         rules.extend(DEPENDENCY_RULES);
     }
+    if node["level"] == "file" && fan_exclude.check_file(node["path"].as_str().unwrap_or("")) != Some(true) {
+        rules.extend(FAN_RULES);
+    }
     rules.into_iter().map(|(rule, metric)| (rule, metric, &config[rule])).collect()
 }
-fn node_findings(node: &Value, config: &Value) -> Result<Vec<Value>> {
+fn node_findings(node: &Value, config: &Value, fan_exclude: &IgnoreSpec) -> Result<Vec<Value>> {
     let mut findings = Vec::new();
-    for limit in enabled_limits(node, config) {
+    for limit in enabled_limits(node, config, fan_exclude) {
         if let Some(finding) = metric_finding(node, limit)? {
             findings.push(finding);
         }
@@ -142,9 +151,12 @@ fn cycle_paths(group: &Value) -> Result<Vec<String>> {
 /// Reject invalid settings, malformed report arrays, or nonnumeric checked metrics.
 pub fn build_check(report: &Value, config: &Value) -> Result<Value> {
     let config = validate_config(config)?;
+    let patterns: Vec<_> =
+        config["fanExclude"].as_array().unwrap().iter().map(|pattern| pattern.as_str().unwrap()).collect();
+    let fan_exclude = IgnoreSpec::new(&patterns.join("\n"))?;
     let mut findings = Vec::new();
     for node in report["nodes"].as_array().ok_or_else(|| anyhow!("nodes must be an array"))? {
-        findings.extend(node_findings(node, &config)?);
+        findings.extend(node_findings(node, &config, &fan_exclude)?);
     }
     if let Some(finding) = cycle_finding(report, &config["maxCircularImportGroups"])? {
         findings.push(finding);

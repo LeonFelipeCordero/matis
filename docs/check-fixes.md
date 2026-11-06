@@ -34,6 +34,16 @@ Remove a dependency from the reported cycle. Move shared definitions into a lowe
 
 Review the files that depend on this file or module. Separate stable interfaces from frequently changing implementation. Remove unnecessary dependencies rather than moving them to hide the measurement.
 
+## maxFanIn
+
+Many files depend on this file. Check whether it combines unrelated responsibilities. Split those responsibilities into focused modules and update callers to import only what they need. A stable shared utility can legitimately have many dependents; use a narrow `fanExclude` pattern when that is intentional.
+
+## maxFanOut
+
+This file depends on many other files. Split independent operations into focused modules and remove unused dependencies. Keep each module responsible for one task. Do not add a forwarding module only to hide dependencies.
+
+Fan limits apply to files, not modules. Set `maxFanIn` or `maxFanOut` to `null` to disable that check, or use `fanExclude` gitignore-style patterns for intentional exceptions. Exclusions suppress only fan findings; dependency counts and other checks stay unchanged.
+
 ## maxInstability
 
 Review outgoing dependencies. Separate unrelated responsibilities and depend on a small stable interface where useful. High instability can be appropriate for application entry points; choose a limit that fits the module's role.

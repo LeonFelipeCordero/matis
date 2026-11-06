@@ -291,6 +291,7 @@ fn reports_recompute_dependencies_preserve_zeros_and_render_exact_markdown() {
 fn checks_report_missing_enabled_metrics_but_skip_isolated_instability() {
     let mut config: Value =
         Value::Object(default_config().as_object().unwrap().keys().map(|key| (key.clone(), Value::Null)).collect());
+    config["fanExclude"] = json!([]);
     config["maxParameters"] = json!(0);
     config["maxInstability"] = json!(0.0);
     let report = json!({"nodes": [{"subject": "a.brew", "kind": "function", "level": "callable", "path": "a.py", "line": 2, "metrics": {}},
@@ -310,6 +311,7 @@ fn count_check(actual: Value, maximum: Value) -> Value {
     for value in config.as_object_mut().unwrap().values_mut() {
         *value = Value::Null;
     }
+    config["fanExclude"] = json!([]);
     config["maxFileLines"] = maximum;
     let report = json!({"summary": {"circularImportGroups": 0}, "circularImports": [], "diagnostics": [],
         "nodes": [{"subject": "a.py", "kind": "file", "level": "file", "path": "a.py", "line": null,
@@ -337,6 +339,8 @@ fn arbitrary_size_limits_remain_exact_json_integers() {
         "maxNestedLoops",
         "maxCircularImportGroups",
         "maxChangeImpact",
+        "maxFanIn",
+        "maxFanOut",
     ] {
         assert_eq!(validate_config(&json!({rule: number})).unwrap()[rule], number);
     }

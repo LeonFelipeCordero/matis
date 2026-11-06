@@ -1,9 +1,9 @@
-use crate::mutations::config::MutationConfig;
+use crate::{mutations::config::MutationConfig, parsing::ignore_spec::IgnoreSpec};
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 use std::{fs, io::ErrorKind, path::Path};
 
-pub const LIMITS: [&str; 9] = [
+pub const LIMITS: [&str; 11] = [
     "maxFileLines",
     "maxFunctionLines",
     "maxParameters",
@@ -13,13 +13,15 @@ pub const LIMITS: [&str; 9] = [
     "maxCircularImportGroups",
     "maxChangeImpact",
     "maxInstability",
+    "maxFanIn",
+    "maxFanOut",
 ];
 
 /// Return default check limits; null limits disable change-impact and instability checks.
 pub fn default_config() -> Value {
     json!({"maxFileLines": 700, "maxFunctionLines": 150, "maxParameters": 3, "maxWeightedComplexity": 8,
         "maxDecisionDepth": 3, "maxNestedLoops": 0, "maxCircularImportGroups": 0,
-        "maxChangeImpact": null, "maxInstability": null})
+        "maxChangeImpact": null, "maxInstability": null, "maxFanIn": 30, "maxFanOut": 20, "fanExclude": []})
 }
 
 /// Read `root/matis.json` and return check limits, excluding validated mutation settings.
@@ -157,6 +159,7 @@ fn validate(value: &Value, project: bool) -> Result<Value> {
     let mut errors = extra_errors(value, project);
     errors.extend(apply_limits(value, &mut config));
     errors.extend(apply_help_links(value, &mut config));
+    errors.extend(apply_fan_exclude(value, &mut config));
     if project {
         errors.extend(apply_mutations(value, &mut config)?);
     }
@@ -171,7 +174,10 @@ fn extra_errors(value: &Value, project: bool) -> Vec<String> {
         .unwrap()
         .iter()
         .filter(|(name, _)| {
-            !(LIMITS.contains(&name.as_str()) || *name == "helpLinks" || project && *name == "mutations")
+            !(LIMITS.contains(&name.as_str())
+                || *name == "helpLinks"
+                || *name == "fanExclude"
+                || project && *name == "mutations")
         })
         .map(|(name, input)| validation_error(name, ("Extra inputs are not permitted", "extra_forbidden"), input))
         .collect()
@@ -217,6 +223,32 @@ fn apply_limits(value: &Value, config: &mut Value) -> Vec<String> {
         }
         config[name] = normalized_limit(name, input);
     }
+    errors
+}
+fn apply_fan_exclude(value: &Value, config: &mut Value) -> Vec<String> {
+    let Some(input) = value.get("fanExclude") else {
+        return vec![];
+    };
+    let Some(patterns) = input.as_array() else {
+        return vec![validation_error("fanExclude", ("Input should be a valid array", "list_type"), input)];
+    };
+    let mut errors = Vec::new();
+    for (index, pattern) in patterns.iter().enumerate() {
+        let field = format!("fanExclude.{index}");
+        match pattern.as_str() {
+            None => errors.push(validation_error(&field, ("Input should be a valid string", "string_type"), pattern)),
+            Some(text) => {
+                if let Err(error) = IgnoreSpec::new(text) {
+                    errors.push(validation_error(
+                        &field,
+                        (&format!("Invalid gitignore pattern: {error}"), "value_error"),
+                        pattern,
+                    ));
+                }
+            }
+        }
+    }
+    config["fanExclude"] = input.clone();
     errors
 }
 fn normalized_limit(name: &str, input: &Value) -> Value {

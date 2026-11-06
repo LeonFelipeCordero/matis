@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn every_check_rule_links_to_a_default_guide_section() {
     let report = json!({"nodes": [
-        {"kind": "file", "level": "file", "metrics": {"lineCount": 1000, "transitiveChangeImpact": 2, "instability": 1}},
+        {"kind": "file", "level": "file", "metrics": {"lineCount": 1000, "transitiveChangeImpact": 2, "instability": 1, "fanIn": 31, "fanOut": 21}},
         {"kind": "function", "metrics": {"lineCount": 200, "parameterCount": 4,
             "weightedComplexity": 9, "maxDecisionDepth": 4, "nestedLoops": 1}}
     ], "summary": {"circularImportGroups": 1}, "circularImports": [],
@@ -11,7 +11,7 @@ fn every_check_rule_links_to_a_default_guide_section() {
     let check = build_check(&report, &json!({"maxChangeImpact": 0, "maxInstability": 0})).unwrap();
     let guide = include_str!("../../../../docs/check-fixes.md");
     let findings = check["findings"].as_array().unwrap();
-    assert_eq!(findings.len(), 10);
+    assert_eq!(findings.len(), 12);
     for finding in findings {
         let rule = finding["rule"].as_str().unwrap();
         assert!(guide.contains(&format!("## {rule}\n")), "{rule}");
@@ -41,6 +41,26 @@ fn custom_help_links_override_only_the_selected_rule() {
         build_check(&json!({"nodes": [], "diagnostics": [], "summary": {"circularImportGroups": 0}}), &config).unwrap(),
         json!({"findings": []})
     );
+}
+
+#[test]
+fn fan_help_links_support_overrides_and_respect_exclusions() {
+    let report = json!({"nodes": [{"kind": "file", "level": "file", "path": "shared.rs",
+        "metrics": {"lineCount": 1, "fanIn": 31, "fanOut": 21}}],
+        "summary": {"circularImportGroups": 0}, "diagnostics": []});
+    let mut config = json!({"helpLinks": {
+        "maxFanIn": "https://example.com/fan-in", "maxFanOut": "https://example.com/fan-out"}});
+    assert_eq!(validate_project_config(&config).unwrap()["helpLinks"], config["helpLinks"]);
+    let check = build_check(&report, &config).unwrap();
+    let findings = check["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 2);
+    for finding in findings {
+        let rule = finding["rule"].as_str().unwrap();
+        assert_eq!(finding["helpUrl"], config["helpLinks"][rule]);
+        assert!(render_check(&check).contains(finding["helpUrl"].as_str().unwrap()));
+    }
+    config["fanExclude"] = json!(["shared.rs"]);
+    assert_eq!(build_check(&report, &config).unwrap()["findings"], json!([]));
 }
 
 #[test]
