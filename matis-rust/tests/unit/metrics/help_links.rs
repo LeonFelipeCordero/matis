@@ -86,3 +86,40 @@ fn help_links_reject_unknown_rules_and_invalid_values() {
     }
     assert!(validate_config(&json!({"helpLinks": {"analysis": "http://localhost/guide"}})).is_ok());
 }
+
+#[test]
+fn help_links_reject_malformed_authorities() {
+    for url in [
+        "https://@",
+        "https://:",
+        "https://:443/guide",
+        "https://user@/guide",
+        "http://[not-an-ip]/guide",
+        "http://[::1/guide",
+        "https://docs.example.com:abc/checks#parameters",
+        "https://example.com:65536/guide",
+        "https://exa%00mple.com/guide",
+    ] {
+        let config = json!({"helpLinks": {"maxParameters": url}});
+        assert!(validate_config(&config).unwrap_err().to_string().contains("helpLinks.maxParameters"), "{url}");
+        assert!(validate_project_config(&config).unwrap_err().to_string().contains("helpLinks.maxParameters"), "{url}");
+    }
+}
+
+#[test]
+fn help_links_preserve_valid_http_authorities_and_paths() {
+    for url in [
+        "https://example.com/guide?topic=parameters#team",
+        "HTTPS://docs.example.com/guide",
+        "hTtP://localhost/guide",
+        "http://localhost:8080/guide",
+        "http://127.0.0.1/guide",
+        "http://[::1]:8080/guide",
+        "https://user:password@example.com/guide",
+        "https://bücher.example/guide%20name",
+    ] {
+        let config = json!({"helpLinks": {"maxParameters": url}});
+        assert_eq!(validate_config(&config).unwrap()["helpLinks"], config["helpLinks"], "{url}");
+        assert_eq!(validate_project_config(&config).unwrap()["helpLinks"], config["helpLinks"], "{url}");
+    }
+}

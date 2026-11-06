@@ -194,7 +194,7 @@ fn apply_help_links(value: &Value, config: &mut Value) -> Vec<String> {
         let error = if !LIMITS.contains(&rule.as_str()) && rule != "analysis" {
             Some(("Unknown check rule", "extra_forbidden"))
         } else if !link.as_str().is_some_and(|url| {
-            (url.starts_with("https://") || url.starts_with("http://"))
+            url::Url::parse(url).is_ok_and(|parsed| matches!(parsed.scheme(), "http" | "https"))
                 && url
                     .split_once("://")
                     .is_some_and(|(_, rest)| rest.split(['/', '?', '#']).next().is_some_and(|host| !host.is_empty()))
