@@ -54,7 +54,7 @@ Read the diagnostic and fix the syntax or unsupported construct at the reported 
 
 ## Use your own guide
 
-Add `helpLinks` to the project's `matis.json`. Keys are rule names from the headings above, including `analysis`. Values must be HTTP or HTTPS links without whitespace or angle brackets. Omitted rules keep the default guide. Links appear as `helpUrl` in JSON and as `How to fix` in Markdown. Matis prints links; it does not fetch them.
+Add `helpLinks` to the project's `matis.json`. Keys are rule names from the headings above, including `analysis`. Values must be HTTP or HTTPS links without whitespace, angle brackets, or backslashes. Omitted rules keep the default guide. Links appear as `helpUrl` in JSON and as `How to fix` in Markdown. Matis prints links; it does not fetch them. Clickable IPv6 links in Markdown require a renderer that supports inline HTML.
 
 ```json
 {

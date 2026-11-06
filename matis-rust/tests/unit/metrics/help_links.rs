@@ -107,6 +107,58 @@ fn help_links_reject_malformed_authorities() {
 }
 
 #[test]
+fn help_links_reject_literal_backslashes() {
+    for url in [
+        r"http://\example.com/guide",
+        r"https://\example.com/guide",
+        r"http://\\example.com/guide",
+        r"https://\\example.com/guide",
+        r"http://example.com/a\b",
+        r"https://example.com/a\b",
+        r"http://example.com/?q=\x#\y",
+        r"https://example.com/?q=\x#\y",
+    ] {
+        let config = json!({"helpLinks": {"analysis": url}});
+        let errors =
+            [validate_config(&config), validate_project_config(&config)].map(|result| result.unwrap_err().to_string());
+        assert!(
+            errors.iter().all(|error| error.contains("helpLinks.analysis") && error.contains("backslashes")),
+            "{errors:?}"
+        );
+    }
+}
+
+#[test]
+fn ipv6_help_links_use_escaped_html_without_changing_json() {
+    let report = json!({"nodes": [], "summary": {"circularImportGroups": 0},
+        "diagnostics": [{"path": "broken.rs", "message": "Parse error"}]});
+    for (url, escaped) in [
+        ("http://[::1]:8080/guide", "http://[::1]:8080/guide"),
+        ("HTTPS://user:password@[2001:db8::1]/guide", "HTTPS://user:password@[2001:db8::1]/guide"),
+        (
+            "https://[::1]/[guide]?a=\"x\"&b='y'&c=&quot;#*help*",
+            "https://[::1]/[guide]?a=&quot;x&quot;&amp;b=&#39;y&#39;&amp;c=&amp;quot;#*help*",
+        ),
+        (
+            "https://[::1]/[x](https://evil.example)/`code`~~strike~~_em_!#help",
+            "https://[::1]/[x](https://evil.example)/`code`~~strike~~_em_!#help",
+        ),
+    ] {
+        let check = build_check(&report, &json!({"helpLinks": {"analysis": url}})).unwrap();
+        assert_eq!(check["findings"][0]["helpUrl"], url);
+        let markdown = render_check(&check);
+        assert!(markdown.contains(&format!("How to fix: <a href=\"{escaped}\">&#")), "{url}");
+        if url == "http://[::1]:8080/guide" {
+            assert!(markdown.ends_with("&#104;&#116;&#116;&#112;&#58;&#47;&#47;&#91;&#58;&#58;&#49;&#93;&#58;&#56;&#48;&#56;&#48;&#47;&#103;&#117;&#105;&#100;&#101;</a>"));
+        }
+    }
+    let url = "https://example.com/[guide]?a=1&b=%5C#team";
+    let check = build_check(&report, &json!({"helpLinks": {"analysis": url}})).unwrap();
+    assert_eq!(check["findings"][0]["helpUrl"], url);
+    assert!(render_check(&check).ends_with(&format!("How to fix: <{url}>")));
+}
+
+#[test]
 fn help_links_preserve_valid_http_authorities_and_paths() {
     for url in [
         "https://example.com/guide?topic=parameters#team",

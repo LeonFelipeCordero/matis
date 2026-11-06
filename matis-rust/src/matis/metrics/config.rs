@@ -198,9 +198,12 @@ fn apply_help_links(value: &Value, config: &mut Value) -> Vec<String> {
                 && url
                     .split_once("://")
                     .is_some_and(|(_, rest)| rest.split(['/', '?', '#']).next().is_some_and(|host| !host.is_empty()))
-                && !url.chars().any(|ch| ch.is_whitespace() || ch.is_control() || matches!(ch, '<' | '>'))
+                && !url.chars().any(|ch| ch.is_whitespace() || ch.is_control() || matches!(ch, '<' | '>' | '\\'))
         }) {
-            Some(("Use a nonempty HTTP or HTTPS link without whitespace or angle brackets", "value_error"))
+            Some((
+                "Use a nonempty HTTP or HTTPS link without whitespace, angle brackets, or backslashes",
+                "value_error",
+            ))
         } else {
             None
         };
