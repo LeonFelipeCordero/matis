@@ -156,6 +156,7 @@ fn validate(value: &Value, project: bool) -> Result<Value> {
     let mut config = default_config();
     let mut errors = extra_errors(value, project);
     errors.extend(apply_limits(value, &mut config));
+    errors.extend(apply_help_links(value, &mut config));
     if project {
         errors.extend(apply_mutations(value, &mut config)?);
     }
@@ -169,9 +170,40 @@ fn extra_errors(value: &Value, project: bool) -> Vec<String> {
         .as_object()
         .unwrap()
         .iter()
-        .filter(|(name, _)| !(LIMITS.contains(&name.as_str()) || project && *name == "mutations"))
+        .filter(|(name, _)| {
+            !(LIMITS.contains(&name.as_str()) || *name == "helpLinks" || project && *name == "mutations")
+        })
         .map(|(name, input)| validation_error(name, ("Extra inputs are not permitted", "extra_forbidden"), input))
         .collect()
+}
+fn apply_help_links(value: &Value, config: &mut Value) -> Vec<String> {
+    let Some(links) = value.get("helpLinks") else {
+        return vec![];
+    };
+    let Some(entries) = links.as_object() else {
+        return vec![validation_error("helpLinks", ("Input should be an object", "model_type"), links)];
+    };
+    let mut errors = Vec::new();
+    for (rule, link) in entries {
+        let error = if !LIMITS.contains(&rule.as_str()) && rule != "analysis" {
+            Some(("Unknown check rule", "extra_forbidden"))
+        } else if !link.as_str().is_some_and(|url| {
+            (url.starts_with("https://") || url.starts_with("http://"))
+                && url
+                    .split_once("://")
+                    .is_some_and(|(_, rest)| rest.split(['/', '?', '#']).next().is_some_and(|host| !host.is_empty()))
+                && !url.chars().any(|ch| ch.is_whitespace() || ch.is_control() || matches!(ch, '<' | '>'))
+        }) {
+            Some(("Use a nonempty HTTP or HTTPS link without whitespace or angle brackets", "value_error"))
+        } else {
+            None
+        };
+        if let Some(error) = error {
+            errors.push(validation_error(&format!("helpLinks.{rule}"), error, link));
+        }
+    }
+    config["helpLinks"] = links.clone();
+    errors
 }
 fn apply_limits(value: &Value, config: &mut Value) -> Vec<String> {
     let mut errors = Vec::new();

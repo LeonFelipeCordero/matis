@@ -153,6 +153,18 @@ pub fn build_check(report: &Value, config: &Value) -> Result<Value> {
         findings.push(json!({"rule": "analysis", "metric": "parseError", "subject": "Analysis incomplete",
             "files": [{"path": diagnostic["path"]}], "actual": null, "limit": null, "details": [diagnostic["message"]]}));
     }
+    for finding in &mut findings {
+        let rule = finding["rule"].as_str().unwrap();
+        finding["helpUrl"] = config["helpLinks"][rule].as_str().map_or_else(
+            || {
+                json!(format!(
+                    "https://github.com/LeonFelipeCordero/matis/blob/main/docs/check-fixes.md#{}",
+                    rule.to_lowercase()
+                ))
+            },
+            |url| json!(url),
+        );
+    }
     Ok(json!({"findings": findings}))
 }
 
@@ -169,6 +181,9 @@ fn finding_section(finding: &Value) -> String {
     rows.push(String::new());
     for detail in finding["details"].as_array().into_iter().flatten() {
         rows.push(format!("- {}", detail.as_str().unwrap_or("")));
+    }
+    if let Some(url) = finding["helpUrl"].as_str() {
+        rows.push(format!("\nHow to fix: <{url}>"));
     }
     rows.join("\n")
 }
