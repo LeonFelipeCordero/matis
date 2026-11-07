@@ -164,6 +164,7 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-language-pack",
  "unicode_names2",
+ "url",
 ]
 
 [[package]]
