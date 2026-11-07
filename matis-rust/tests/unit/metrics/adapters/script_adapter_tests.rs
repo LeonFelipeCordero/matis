@@ -173,6 +173,44 @@ fn script_exports_keep_runtime_aliases_default_and_namespace_member_names() {
     assert!(namespace.member("run").is_empty());
 }
 #[test]
+fn script_relative_imports_resolve_source_and_emitted_extensions() {
+    for ((specifier, path, language), importer) in [
+        ("./tools.js", "tools.ts", "typescript"),
+        ("./tools.js", "tools.tsx", "tsx"),
+        ("./tools.jsx", "tools.tsx", "tsx"),
+        ("./tools.ts", "tools.ts", "typescript"),
+        ("./tools.tsx", "tools.tsx", "tsx"),
+        ("./tools.js", "tools.js", "javascript"),
+        ("./tools", "tools.ts", "typescript"),
+        ("./tools/index.js", "tools/index.ts", "typescript"),
+    ]
+    .into_iter()
+    .flat_map(|case| ["javascript", "typescript", "tsx"].map(|importer| (case, importer)))
+    {
+        let main = file("main.ts", importer, &format!("import {{run}} from '{specifier}';"));
+        let ctx = imports(vec![main.clone(), file(path, language, "export function run() {}")]);
+        assert_eq!(ctx.files(&main, specifier, None)[0].source.path, path, "{importer}: {specifier}");
+        assert_eq!(names(&ctx.get(&main, "run", 0).unwrap().targets), ["run"]);
+    }
+}
+#[test]
+fn script_extension_substitution_preserves_exact_paths_and_rejects_guesses() {
+    let main = file("main.ts", "typescript", "");
+    let ts = file("tools.ts", "typescript", "");
+    let tsx = file("tools.tsx", "tsx", "");
+    let js = file("tools.js", "javascript", "");
+    assert_eq!(javascript::paths(&main, "./tools.js", &[ts.clone(), js.clone()])[0].source.path, "tools.js");
+    assert!(
+        javascript::paths(&main, "./tools.js", &[js, file("tools.js.ts", "typescript", ""), ts.clone()]).is_empty()
+    );
+    assert!(javascript::paths(&main, "./tools.js", &[ts.clone(), tsx.clone()]).is_empty());
+    assert!(javascript::paths(&main, "./tools", &[ts.clone(), tsx]).is_empty());
+    for specifier in ["./tools.jsx", "./tools.json", "./missing.js", "tools.js", "package/tools.js"] {
+        assert!(javascript::paths(&main, specifier, std::slice::from_ref(&ts)).is_empty(), "{specifier}");
+    }
+    assert!(javascript::paths(&main, "./tools.js", &[file("tools.py", "python", "")]).is_empty());
+}
+#[test]
 fn script_namespace_targets_keep_export_insertion_order() {
     let target = file(
         "tools.js",

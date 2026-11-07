@@ -1,0 +1,93 @@
+[
+  {
+    "source": "app/main.ts",
+    "target": "services/greeter.ts",
+    "type": "IMPORTS",
+    "typeOnly": true,
+    "evidence": "import type { Greeting } from \"../services/greeter.js\";"
+  },
+  {
+    "source": "app/main.ts",
+    "target": "views/Badge.tsx",
+    "type": "IMPORTS",
+    "typeOnly": false,
+    "evidence": "import { badge as sourceBadge } from \"../views/Badge.tsx\";"
+  },
+  {
+    "source": "app/main.ts",
+    "target": "views/Badge.tsx",
+    "type": "IMPORTS",
+    "typeOnly": false,
+    "evidence": "import { badge } from \"../views/Badge.jsx\";"
+  },
+  {
+    "source": "app/main.ts",
+    "target": "services/greeter.ts",
+    "type": "IMPORTS",
+    "typeOnly": false,
+    "evidence": "import { greet as sourceGreet } from \"../services/greeter.ts\";"
+  },
+  {
+    "source": "app/main.ts",
+    "target": "services/greeter.ts",
+    "type": "IMPORTS",
+    "typeOnly": false,
+    "evidence": "import { greet } from \"../services/greeter.js\";"
+  },
+  {
+    "source": "app/main.ts",
+    "target": "legacy/helpers.js",
+    "type": "IMPORTS",
+    "typeOnly": false,
+    "evidence": "import { suffix } from \"../legacy/helpers.js\";"
+  },
+  {
+    "source": "app/main.ts::run",
+    "target": "views/Badge.tsx::badge",
+    "type": "CALLS",
+    "typeOnly": false,
+    "evidence": "badge()"
+  },
+  {
+    "source": "app/main.ts::run",
+    "target": "services/greeter.ts::greet",
+    "type": "CALLS",
+    "typeOnly": false,
+    "evidence": "greet()"
+  },
+  {
+    "source": "app/main.ts::run",
+    "target": "views/Badge.tsx::badge",
+    "type": "CALLS",
+    "typeOnly": false,
+    "evidence": "sourceBadge()"
+  },
+  {
+    "source": "app/main.ts::run",
+    "target": "services/greeter.ts::greet",
+    "type": "CALLS",
+    "typeOnly": false,
+    "evidence": "sourceGreet()"
+  },
+  {
+    "source": "app/main.ts::run",
+    "target": "legacy/helpers.js::suffix",
+    "type": "CALLS",
+    "typeOnly": false,
+    "evidence": "suffix()"
+  },
+  {
+    "source": "legacy/main.js",
+    "target": "services/greeter.ts",
+    "type": "IMPORTS",
+    "typeOnly": false,
+    "evidence": "import { greet } from \"../services/greeter.js\";"
+  },
+  {
+    "source": "legacy/main.js::runLegacy",
+    "target": "services/greeter.ts::greet",
+    "type": "CALLS",
+    "typeOnly": false,
+    "evidence": "greet()"
+  }
+]

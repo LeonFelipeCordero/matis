@@ -30,7 +30,11 @@ fn covered_files() -> BTreeSet<String> {
         .map(|language| format!("safety_review/{language}.json"));
     let members =
         ["python", "javascript", "typescript", "tsx"].iter().map(|language| format!("script_members/{language}.json"));
-    let selection = ["java_callable_selection.json".to_owned(), "kotlin_callable_selection.json".to_owned()];
+    let selection = [
+        "java_callable_selection.json".to_owned(),
+        "kotlin_callable_selection.json".to_owned(),
+        "script_modules.json".to_owned(),
+    ];
     coffee.chain(mutations).chain(safety).chain(members).chain(selection).collect()
 }
 
@@ -49,5 +53,5 @@ fn every_reference_golden_has_a_native_suite() {
         files(&root).iter().map(|path| path.strip_prefix(&root).unwrap().to_str().unwrap().to_owned()).collect();
     let covered = covered_files();
     assert_eq!(actual, covered, "reference golden inventory changed; extend native tests, not the goldens");
-    assert_eq!(covered.len(), 73);
+    assert_eq!(covered.len(), 74);
 }
