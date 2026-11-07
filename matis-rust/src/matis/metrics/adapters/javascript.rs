@@ -1,7 +1,7 @@
 //! JavaScript and JSX runtime exports, imports, methods and receiver policies.
 use super::parameters::{parameter_children, parameter_node};
 use super::resolution::{CallableIdentity, ImportBindings, ResolutionAdapter};
-use super::resolution_paths::{quoted_path, relative_targets, top_symbols};
+use super::resolution_paths::{quoted_path, relative_targets, resolve_path, top_symbols};
 use super::script_resolution::{inherited_members, member_mutation, member_write, same_declaration_group};
 use crate::domain::models::{ParsedFile, Symbol};
 use crate::metrics::resolution_contract::{FUNCTIONS, ImportRequest, ResolutionRequest};
@@ -10,6 +10,7 @@ use crate::metrics::resolver::CallResolver;
 use crate::syntax::{children, field, named_children, text};
 use regex::Regex;
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 use std::sync::LazyLock;
 use tree_sitter::Node;
 
@@ -279,18 +280,38 @@ pub fn binding<'a>(
     }
     (target, scope)
 }
-/// Resolve dot-prefixed slash imports relative to `source`, allowing directory `index` files only.
-/// Bare package names yield no targets; normalization may query filesystem metadata.
+/// Resolve relative script imports, allowing directory `index` files only.
+/// Prefer exact paths; absent `.js`/`.jsx` files may resolve to unique TypeScript sources.
+/// Bare package names and ambiguous substitutions yield no targets.
 pub fn paths(source: &ParsedFile, name: &str, files: &[ParsedFile]) -> Vec<ParsedFile> {
-    if name.starts_with('.') && name.contains('/') {
-        relative_targets(
-            &ImportRequest { file: source, path: name.into(), position: None, source: String::new() },
-            files,
-            true,
-        )
-    } else {
-        vec![]
+    if !name.starts_with('.') || !name.contains('/') {
+        return vec![];
     }
+    let targets = relative_targets(
+        &ImportRequest { file: source, path: name.into(), position: None, source: String::new() },
+        files,
+        true,
+    );
+    if !targets.is_empty() {
+        return targets;
+    }
+    let extensions: &[&str] = match Path::new(name).extension().and_then(|ext| ext.to_str()) {
+        Some("js") => &["ts", "tsx"],
+        Some("jsx") => &["tsx"],
+        _ => return vec![],
+    };
+    let base = resolve_path(&source.source.absolute_path.parent().unwrap_or(Path::new(".")).join(name));
+    // Do not reinterpret an ambiguous direct path as a different extension.
+    if files.iter().any(|file| {
+        let path = resolve_path(&file.source.absolute_path);
+        path == base || path.with_extension("") == base
+    }) {
+        return vec![];
+    }
+    let candidates: Vec<_> = extensions.iter().map(|ext| resolve_path(&base.with_extension(ext))).collect();
+    let matches: Vec<_> =
+        files.iter().filter(|file| candidates.contains(&resolve_path(&file.source.absolute_path))).cloned().collect();
+    if matches.len() == 1 { matches } else { vec![] }
 }
 /// Return runtime exports named `name` only when the requested import resolves to one file.
 pub fn members(ctx: &ImportBindings, request: &ImportRequest<'_>, name: &str) -> Vec<Symbol> {
