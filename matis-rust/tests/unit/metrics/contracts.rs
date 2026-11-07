@@ -16,6 +16,8 @@ use matis::{
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
 
+#[path = "help_links.rs"]
+mod help_links;
 #[path = "isolated.rs"]
 mod isolated;
 
@@ -299,7 +301,7 @@ fn checks_report_missing_enabled_metrics_but_skip_isolated_instability() {
     assert_eq!(check["findings"].as_array().unwrap().len(), 1);
     assert_eq!(
         render_check(&check),
-        "## maxParameters: `a.brew`\n\nMeasured: N/A; maximum: 0.\n\n- `a.py:2`\n\n- Parameters is unavailable; cannot evaluate maximum 0."
+        "## maxParameters: `a.brew`\n\nMeasured: N/A; maximum: 0.\n\n- `a.py:2`\n\n- Parameters is unavailable; cannot evaluate maximum 0.\n\nHow to fix: <https://github.com/LeonFelipeCordero/matis/blob/main/docs/check-fixes.md#maxparameters>"
     );
     assert_eq!(render_check(&json!({"findings": []})), "All checks passed.");
 }
