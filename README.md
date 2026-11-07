@@ -66,7 +66,22 @@ Matis supports grammars recognized by its pinned Tree-sitter language pack, **ex
 | `maxChangeImpact` | `null` (disabled) | Files/modules |
 | `maxInstability` | `null` (disabled) | Files/modules |
 
-Checks fail when limits are exceeded or analysis is incomplete.
+Checks fail when limits are exceeded or analysis is incomplete. Each failure links to its section in the [fix guide](docs/check-fixes.md).
+
+#### Use your own fix guide
+
+Add `helpLinks` to the project's `matis.json` to override individual fix links:
+
+```json
+{
+  "helpLinks": {
+    "maxParameters": "https://example.com/team/parameter-objects",
+    "maxFileLines": "https://example.com/team/module-structure"
+  }
+}
+```
+
+Keys must be rule names from the [fix guide](docs/check-fixes.md), including `analysis`. Values must be HTTP or HTTPS links without whitespace, angle brackets, or backslashes. Omitted rules keep the default guide. Links appear as `helpUrl` in JSON and as `How to fix` in Markdown. Matis prints links; it does not fetch them. Clickable IPv6 links in Markdown require a renderer that supports inline HTML.
 
 ### Mutation manifests
 
