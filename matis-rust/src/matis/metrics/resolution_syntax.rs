@@ -433,8 +433,9 @@ mod tests {
         Syntax::new(&parsed("python", source), get_resolution_adapter("python"))
     }
     #[test]
-    fn constructors_and_clones_defer_parsing_for_every_language() {
-        for language in ["python", "rust", "java", "javascript", "json", "csv"] {
+    fn constructors_and_clones_defer_parsing_for_every_supported_grammar() {
+        // JSX files use the JavaScript grammar during discovery.
+        for language in crate::parsing::discovery::SUPPORTED_LANGUAGES.iter().copied().filter(|lang| *lang != "jsx") {
             let syntax = Syntax::new(&parsed(language, b"x"), get_resolution_adapter(language));
             let cloned = syntax.clone();
             assert!(syntax.cache.tree.get().is_none());
