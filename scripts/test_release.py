@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from itertools import product
 from pathlib import Path
 
 
@@ -15,21 +16,27 @@ class ReleaseTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         shutil.copytree(ROOT / 'scripts', self.root / 'scripts')
+        # Redirect only the test copy; production has no host configuration override.
+        script = self.root / 'scripts/release.sh'
+        script.write_text(script.read_text().replace('/etc/os-release', str(self.root / 'os-release')))
+        (self.root / 'os-release').write_text('ID=ubuntu\n')
         (self.root / 'artifacts').mkdir()
         self.bin = self.root / 'bin'
         self.bin.mkdir()
         self.log = self.root / 'commands'
         self.env = dict(os.environ, PATH=f'{self.bin}:{os.environ["PATH"]}',
                         RELEASE_LOG=str(self.log), FIXTURE=str(self.root))
+        self.mock('uname', 'echo Linux\n')
         self.mock('gh', r'''
  echo "$*" >> "$RELEASE_LOG"
  case "$*" in
+   auth\ status) [ "${FAIL_AUTH:-0}" != 1 ] ;;
    *--json\ isDraft*)
      [ "${RELEASE_STATE:-missing}" != missing ] || exit 1
      echo "$RELEASE_STATE" ;;
    release\ upload*) [ "${FAIL_UPLOAD:-0}" != 1 ] ;;
    *--json\ assets*)
-     printf '%s\n' matis-1.2.3-ubuntu.deb matis-1.2.3-arch.pkg.tar.zst matis-1.2.3-macos.zip
+     printf '%s\n' "matis-1.2.3-${NATIVE_ASSET:-ubuntu.deb}"
      [ "${EXTRA_REMOTE:-0}" != 1 ] || echo unexpected.zip ;;
  esac
 ''')
@@ -47,8 +54,7 @@ class ReleaseTests(unittest.TestCase):
         return result
 
     def packages(self):
-        for suffix in ['ubuntu.deb', 'arch.pkg.tar.zst', 'macos.zip']:
-            (self.root / 'artifacts' / f'matis-1.2.3-{suffix}').write_text('package')
+        (self.root / 'artifacts/matis-1.2.3-ubuntu.deb').write_text('package')
 
     def commands(self):
         return self.log.read_text() if self.log.exists() else ''
@@ -85,25 +91,25 @@ class ReleaseTests(unittest.TestCase):
         self.run_release('publish', '1.2.3', success=False)
         self.assertNotIn('release upload', self.commands())
 
-    def test_missing_empty_symlink_or_extra_local_assets_prevent_gh(self):
-        for kind in ['missing', 'empty', 'symlink', 'extra']:
+    def test_missing_empty_or_symlink_package_prevents_gh(self):
+        for kind in ['missing', 'empty', 'symlink']:
             with self.subTest(kind=kind):
-                self.packages()
-                package = self.root / 'artifacts/matis-1.2.3-macos.zip'
-                if kind == 'missing':
-                    package.unlink()
-                elif kind == 'empty':
+                package = self.root / 'artifacts/matis-1.2.3-ubuntu.deb'
+                package.unlink(missing_ok=True)
+                if kind == 'empty':
                     package.write_text('')
                 elif kind == 'symlink':
-                    package.unlink()
-                    package.symlink_to(self.root / 'artifacts/matis-1.2.3-ubuntu.deb')
-                else:
-                    package.unlink(missing_ok=True)
-                    self.packages()
-                    (self.root / 'artifacts/matis-1.2.3-extra.zip').write_text('extra')
+                    package.symlink_to(self.root / 'scripts/release.sh')
                 self.run_release('publish', '1.2.3', success=False)
                 self.assertEqual(self.commands(), '')
-                package.unlink(missing_ok=True)
+
+    def test_other_local_platform_packages_are_not_uploaded(self):
+        self.packages()
+        (self.root / 'artifacts/matis-1.2.3-arch.pkg.tar.zst').write_text('other')
+        self.env['RELEASE_STATE'] = 'true'
+        self.run_release('publish', '1.2.3', 'ubuntu')
+        upload = next(line for line in self.commands().splitlines() if line.startswith('release upload'))
+        self.assertEqual(upload, 'release upload v1.2.3 artifacts/matis-1.2.3-ubuntu.deb --clobber')
 
     def test_invalid_arguments_and_wrong_os_do_not_build(self):
         self.mock('uname', 'echo Darwin\n')
@@ -134,9 +140,16 @@ if [ "$2" = --list ]; then echo v1.2.2; fi
         (rust / 'Cargo.lock').write_text('version = 4\n[[package]]\nname = "matis-rust"\nversion = "0.1.0"\n')
         (self.root / 'dashboard').mkdir()
         (self.root / 'dashboard/package.json').write_text('{}')
-        self.mock('cargo', '''
+        (self.root / 'dashboard/public').mkdir()
+        (self.root / 'dashboard/public/logo.png').write_bytes(b'icon')
+        self.mock('cargo', r'''
+echo cargo >> "$RELEASE_LOG"
+[ "${FAIL_BUILD:-0}" != 1 ] || exit 1
+version=$(python3 -c 'import tomllib; print(tomllib.load(open("matis-rust/Cargo.toml", "rb"))["package"]["version"])')
+grep -q "version = \"$version\"" matis-rust/Cargo.lock
+[ "${FAIL_BINARY:-0}" != 1 ] || version=9.9.9
 mkdir -p matis-rust/target/release
-printf '#!/bin/sh\necho matis 1.2.3\n' > matis-rust/target/release/matis
+printf '#!/bin/sh\necho matis %s\n' "$version" > matis-rust/target/release/matis
 cp matis-rust/target/release/matis matis-rust/target/release/matis-migrate
 chmod +x matis-rust/target/release/*
 ''')
@@ -151,20 +164,6 @@ elif [ "$1" = build ]; then
 fi
 ''')
         subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
-
-    def test_native_mac_bundle_with_mocked_build_tools(self):
-        self.prepare_build()
-        self.mock('uname', 'echo Darwin\n')
-        self.run_release('build', 'macos', '1.2.3')
-        rust = self.root / 'matis-rust'
-        import zipfile
-        with zipfile.ZipFile(self.root / 'artifacts/matis-1.2.3-macos.zip') as archive:
-            names = archive.namelist()
-            for name in ['MacOS/matis', 'MacOS/matis-migrate', 'MacOS/matis-ui',
-                         'Resources/dashboard/server/index.mjs', 'Info.plist']:
-                self.assertIn(f'Matis.app/Contents/{name}', names)
-            self.assertIn(b'1.2.3', archive.read('Matis.app/Contents/Info.plist'))
-        self.assertIn('0.1.0', (rust / 'Cargo.toml').read_text())
 
     @unittest.skipUnless(shutil.which('bun') and os.uname().sysname == 'Linux', 'Requires Linux and Bun')
     def test_compiled_launcher_migrates_and_opens_loopback_dashboard(self):
@@ -204,34 +203,105 @@ fi
             process.terminate()
             process.wait(timeout=10)
 
-    @unittest.skipUnless(Path('/etc/os-release').exists(), 'Linux packaging only')
-    def test_linux_package_contains_cli_desktop_and_dashboard(self):
-        import shlex
-        release = dict(line.split('=', 1) for line in Path('/etc/os-release').read_text().splitlines() if '=' in line)
-        ids = shlex.split(release['ID'] + ' ' + release.get('ID_LIKE', ''))
-        platform = next((value for value in ['ubuntu', 'arch'] if value in ids), None)
-        if platform is None:
-            self.skipTest('Ubuntu or Arch required')
+    def prepare_native_release(self, platform='ubuntu'):
         self.prepare_build()
-        (self.root / 'dashboard/public').mkdir()
-        (self.root / 'dashboard/public/logo.png').write_bytes(b'icon')
-        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
-        self.mock('makepkg', r'''
+        (self.root / 'os-release').write_text(f'ID={platform}\n')
+        self.env['NATIVE_ASSET'] = 'ubuntu.deb' if platform == 'ubuntu' else 'arch.pkg.tar.zst'
+        self.mock('uname', '[ "$1" = -m ] && echo x86_64 || echo Linux\n')
+        self.mock('makepkg', r"""
 cp -a root "$FIXTURE/payload"
-echo package > "matis-1.2.3-1-$(uname -m).pkg.tar.zst"
-''')
+version=$(sed -n 's/^pkgver=//p' PKGBUILD)
+root/usr/bin/matis --version > "matis-$version-1-x86_64.pkg.tar.zst"
+cp PKGBUILD "$FIXTURE/metadata"
+""")
         self.mock('dpkg', 'echo amd64\n')
-        self.mock('dpkg-deb', r'''
+        self.mock('dpkg-deb', r"""
 cp -a "$3" "$FIXTURE/payload"
-echo package > "$4"
-''')
-        self.run_release('build', platform, '1.2.3')
+"$3/usr/bin/matis" --version > "$4"
+cp "$3/DEBIAN/control" "$FIXTURE/metadata"
+""")
+        subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+                        'commit', '-qm', 'fixture'], cwd=self.root, check=True)
+        real_git = shutil.which('git')
+        self.mock('git', f"""
+if [ "$1" = fetch ]; then
+  echo "$*" >> "$RELEASE_LOG"
+  [ "${{FAIL_FETCH:-0}}" != 1 ] || exit 1
+  "{real_git}" tag v1.2.2
+  # A fetched stable tag must not point at HEAD.
+  "{real_git}" -c user.name=Test -c user.email=test@example.com commit --allow-empty -qm next
+else
+  exec "{real_git}" "$@"
+fi
+""")
+
+    def test_no_arguments_ubuntu_release(self):
+        self.assert_native_release('ubuntu')
+
+    def test_no_arguments_arch_release(self):
+        self.assert_native_release('arch')
+
+    def assert_native_release(self, platform):
+        self.prepare_native_release(platform)
+        self.run_release()
         payload = self.root / 'payload/usr'
         for name in ['bin/matis', 'bin/matis-migrate', 'bin/matis-ui',
                      'lib/matis/dashboard/server/index.mjs', 'share/applications/matis.desktop']:
             self.assertTrue((payload / name).is_file(), name)
         self.assertIn('Exec=matis-ui', (payload / 'share/applications/matis.desktop').read_text())
-        self.assertEqual(len(list((self.root / 'artifacts').glob('matis-*'))), 1)
+        self.assertIn('1.2.3', (self.root / 'metadata').read_text())
+        artifacts = list((self.root / 'artifacts').iterdir())
+        self.assertEqual([file.name for file in artifacts], [f'matis-1.2.3-{self.env["NATIVE_ASSET"]}'])
+        self.assertEqual(artifacts[0].read_text().strip(), 'matis 1.2.3')
+        self.assertIn('0.1.0', (self.root / 'matis-rust/Cargo.toml').read_text())
+        self.assertIn('0.1.0', (self.root / 'matis-rust/Cargo.lock').read_text())
+        commands = self.commands().splitlines()
+        self.assertEqual(commands[:3], ['auth status', 'fetch origin --tags', 'cargo'])
+        self.assertEqual(sum(line.startswith('release upload') for line in commands), 1)
+        self.assertEqual(commands[-1], 'release edit v1.2.3 --draft=false')
+        self.assertFalse(any(word in self.commands() for word in ['macos', 'docker', 'podman', 'ssh']))
+
+    def test_no_arguments_short_circuits_failed_boundaries(self):
+        self.prepare_native_release()
+        for variable, forbidden in [('FAIL_AUTH', 'fetch'), ('FAIL_FETCH', 'cargo'),
+                                    ('FAIL_BUILD', 'release'), ('FAIL_BINARY', 'release'),
+                                    ('FAIL_UPLOAD', 'release edit'),
+                                    ('EXTRA_REMOTE', 'release edit')]:
+            with self.subTest(variable=variable):
+                self.log.unlink(missing_ok=True)
+                self.env[variable] = '1'
+                self.run_release(success=False)
+                self.assertNotIn(forbidden, self.commands())
+                del self.env[variable]
+                subprocess.run([shutil.which('git'), 'tag', '-d', 'v1.2.2'],
+                               cwd=self.root, capture_output=True, check=False)
+
+    def test_invalid_selected_version_prevents_build_and_publish(self):
+        self.prepare_native_release()
+        self.mock('python3', 'echo 01.2.3\n')
+        self.run_release(success=False)
+        self.assertEqual(self.commands().splitlines(), ['auth status', 'fetch origin --tags'])
+
+    def test_unsupported_hosts_fail_before_side_effects(self):
+        hosts = [('Darwin', 'ID=arch'), ('Linux', 'ID=fedora'), ('Linux', 'ID=debian')]
+        commands = [(), ('build', 'ubuntu', '1.2.3'), ('publish', '1.2.3')]
+        for (host, identity), args in product(hosts, commands):
+            with self.subTest(host=host, identity=identity, args=args):
+                self.mock('uname', f'echo {host}\n')
+                (self.root / 'os-release').write_text(identity + '\n')
+                self.run_release(*args, success=False)
+                self.assertEqual(self.commands(), '')
+                self.assertEqual(list((self.root / 'artifacts').iterdir()), [])
+
+    def test_id_like_and_native_id_detection(self):
+        self.packages()
+        self.env['RELEASE_STATE'] = 'true'
+        for identity in ['ID=derivative\nID_LIKE="debian ubuntu"\n',
+                         'ID=ubuntu\nID_LIKE=arch\n']:
+            with self.subTest(identity=identity):
+                (self.root / 'os-release').write_text(identity)
+                self.run_release('publish', '1.2.3')
+        self.run_release('publish', '1.2.3', 'arch', success=False)
 
 
 if __name__ == '__main__':

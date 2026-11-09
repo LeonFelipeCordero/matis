@@ -6,27 +6,30 @@ fail() { echo "$*" >&2; exit 1; }
 
 help() {
   cat <<'HELP'
-Usage: bash scripts/release.sh version
-       bash scripts/release.sh build <ubuntu|arch|macos> <version>
-       bash scripts/release.sh publish <version>
+Usage: bash scripts/release.sh
 
-Local builds only, on the matching OS and native architecture (no cross-builds).
-Use the same architecture for Ubuntu and Arch. Build Ubuntu on the oldest
-supported Ubuntu release; binaries require that release's system libraries.
-Requires Rust, Bun, Python 3.11+, Git; dpkg-deb on Ubuntu, makepkg on Arch,
-and zip on macOS. No new application dependencies are installed by this script.
+Detect native Ubuntu/Arch, check gh authentication, fetch origin tags, select
+and validate the version, build one native package, then publish it.
+Optional debugging commands:
+       bash scripts/release.sh version
+       bash scripts/release.sh build <ubuntu|arch> <version>
+       bash scripts/release.sh publish <version> [ubuntu|arch]
+
+Local builds only, on the matching distro and native architecture.
+Build Ubuntu on the oldest supported Ubuntu release; binaries require that
+release's system libraries. Requires Rust, Bun, Python 3.11+, Git, authenticated
+gh, and dpkg-deb on Ubuntu or makepkg on Arch (run as a normal user).
+No new application dependencies are installed by this script.
 Dashboard dependencies are installed with bun install --no-save.
 version uses existing stable tags and the Cargo baseline, without editing files.
 build stamps Cargo files in a temporary source copy, not the working tree.
-Outputs: artifacts/matis-<version>-ubuntu.deb, -arch.pkg.tar.zst, -macos.zip.
-Linux installs matis, matis-migrate, matis-ui and an application launcher.
-macOS zip contains Matis.app; CLI tools are in Contents/MacOS.
+Output: artifacts/matis-<version>-ubuntu.deb OR -arch.pkg.tar.zst.
+Packages install matis, matis-migrate, matis-ui and an application launcher.
 The native matis-ui executable serves the dashboard on loopback port 43127
 and opens the default browser. It runs until stopped; port must be free.
-Collect all three packages in artifacts/ on one machine before publish.
-publish requires gh authentication and a pushed source commit. It creates or
-resumes a draft v<version>, uploads packages, checks the exact remote asset set,
-then publishes. It refuses changes to published releases. No Actions storage.
+publish requires a pushed source commit. It creates or resumes a draft
+v<version>, uploads one package, checks the exact remote asset set, then
+publishes. It refuses changes to published releases. No Actions storage.
 HELP
 }
 
@@ -34,18 +37,21 @@ validate_version() {
   [[ $1 =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || fail 'Expected stable major.minor.patch version'
 }
 
+detect_platform() {
+  [[ $(uname -s) == Linux ]] || fail 'Only native Ubuntu/Arch Linux is supported'
+  [[ -r /etc/os-release ]] || fail 'Missing /etc/os-release'
+  local ID='' ID_LIKE='' platform
+  . /etc/os-release
+  case "$ID" in ubuntu|arch) echo "$ID"; return ;; esac
+  for platform in ubuntu arch; do
+    if [[ " $ID_LIKE " == *" $platform "* ]]; then echo "$platform"; return; fi
+  done
+  fail "Unsupported Linux distribution: $ID"
+}
+
 build() {
-  local platform=$1 version=$2 host stage package output
-  host=$(uname -s)
-  case "$platform:$host" in
-    ubuntu:Linux|arch:Linux)
-      [[ -r /etc/os-release ]] || fail 'Missing /etc/os-release'
-      . /etc/os-release
-      [[ $ID == "$platform" || " ${ID_LIKE:-} " == *" $platform "* ]] || fail "Build $platform on $platform, not $ID"
-      ;;
-    macos:Darwin) ;;
-    *) fail "Build $platform on its matching OS" ;;
-  esac
+  local platform=$1 version=$2 stage package output
+  [[ $platform == "$(detect_platform)" ]] || fail "Build $platform on its matching native distro"
   stage=$(mktemp -d)
   trap "rm -rf '$stage'" EXIT
   mkdir -p "$stage/source" artifacts
@@ -60,23 +66,6 @@ build() {
     bun install --no-save >&2
     bun run build >&2
   )
-  if [[ $platform == macos ]]; then
-    package="$stage/Matis.app/Contents"
-    mkdir -p "$package/MacOS" "$package/Resources"
-    cp "$stage/source/matis-rust/target/release/"{matis,matis-migrate} "$package/MacOS/"
-    cp -R "$stage/source/dashboard/.output" "$package/Resources/dashboard"
-    cp LICENSE "$package/Resources/"
-    bun build scripts/desktop.ts --compile --outfile "$package/MacOS/matis-ui" >&2
-    cat > "$package/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>CFBundleExecutable</key><string>matis-ui</string><key>CFBundleIdentifier</key><string>dev.matis.desktop</string><key>CFBundleName</key><string>Matis</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>$version</string></dict></plist>
-PLIST
-    (cd "$stage" && zip -qr matis.zip Matis.app)
-    output="matis-$version-macos.zip"
-    mv "$stage/matis.zip" "artifacts/$output"
-    return
-  fi
   package="$stage/root"
   mkdir -p "$package/usr/"{bin,lib/matis,share/applications,share/licenses/matis,share/pixmaps}
   cp "$stage/source/matis-rust/target/release/"{matis,matis-migrate} "$package/usr/bin/"
@@ -110,28 +99,50 @@ PKGBUILD
 }
 
 publish() {
-  local version=$1 tag="v$1" file state expected actual commit
-  local files=("artifacts/matis-$version-ubuntu.deb" "artifacts/matis-$version-arch.pkg.tar.zst" "artifacts/matis-$version-macos.zip")
-  for file in "${files[@]}"; do [[ -s $file && ! -L $file ]] || fail "Missing or empty package: $file"; done
-  expected=$(printf '%s\n' "${files[@]##*/}" | LC_ALL=C sort)
-  actual=$(find artifacts -maxdepth 1 -name "matis-$version-*" -exec basename {} \; | LC_ALL=C sort)
-  [[ $actual == "$expected" ]] || fail 'Expected exactly three platform packages for this version'
+  local version=$1 platform=$2 tag="v$1" file state expected actual commit
+  [[ $platform == "$(detect_platform)" ]] || fail "Publish $platform on its matching native distro"
+  case "$platform" in
+    ubuntu) file="artifacts/matis-$version-ubuntu.deb" ;;
+    arch) file="artifacts/matis-$version-arch.pkg.tar.zst" ;;
+  esac
+  [[ -s $file && ! -L $file ]] || fail "Missing or empty package: $file"
+  expected=${file##*/}
   if state=$(gh release view "$tag" --json isDraft --jq '.isDraft' 2>/dev/null); then
     [[ $state == true ]] || fail "$tag is already published"
   else
     commit=$(git rev-parse --verify HEAD)
     gh release create "$tag" --draft --target "$commit" --title "$tag" --generate-notes
   fi
-  gh release upload "$tag" "${files[@]}" --clobber
+  gh release upload "$tag" "$file" --clobber
   actual=$(gh release view "$tag" --json assets --jq '.assets[].name' | LC_ALL=C sort)
   [[ $actual == "$expected" ]] || fail 'Remote assets differ; release remains draft'
   gh release edit "$tag" --draft=false
 }
 
-case ${1:---help} in
+main() {
+  local platform version
+  platform=$(detect_platform)
+  gh auth status
+  git fetch origin --tags
+  version=$(python3 scripts/releaseVersion.py)
+  validate_version "$version"
+  build "$platform" "$version"
+  publish "$version" "$platform"
+}
+
+if [[ $# == 0 ]]; then
+  main
+  exit
+fi
+
+case $1 in
   --help|-h) help ;;
   version) [[ $# == 1 ]] || fail 'version takes no arguments'; python3 scripts/releaseVersion.py ;;
   build) [[ $# == 3 ]] || fail 'build requires platform and version'; validate_version "$3"; build "$2" "$3" ;;
-  publish) [[ $# == 2 ]] || fail 'publish requires version'; validate_version "$2"; publish "$2" ;;
+  publish)
+    [[ $# == 2 || $# == 3 ]] || fail 'publish requires version and optional platform'
+    validate_version "$2"
+    publish "$2" "${3:-$(detect_platform)}"
+    ;;
   *) help >&2; exit 1 ;;
 esac
