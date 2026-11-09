@@ -1,6 +1,7 @@
 """Select a release version and stamp the build without changing main."""
 
 import re
+import sys
 import subprocess
 import tomllib
 from pathlib import Path
@@ -42,12 +43,13 @@ def stamp_version(manifest, lockfile, version):
 
 def main():
     manifest = Path("matis-rust/Cargo.toml")
+    if len(sys.argv) == 3 and sys.argv[1] == "stamp":
+        stamp_version(manifest, Path("matis-rust/Cargo.lock"), sys.argv[2])
+        return
     base = tomllib.loads(manifest.read_text())["package"]["version"]
     tags = subprocess.check_output(["git", "tag", "--list"], text=True).splitlines()
     current = subprocess.check_output(["git", "tag", "--points-at", "HEAD"], text=True).splitlines()
-    version = next_version(base, tags, current)
-    stamp_version(manifest, Path("matis-rust/Cargo.lock"), version)
-    print(version)
+    print(next_version(base, tags, current))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Matis
+Comment=Explore repository architecture and metrics
+Exec=matis-ui
+Icon=matis
+Terminal=false
+Categories=Development;
