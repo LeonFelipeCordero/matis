@@ -1,0 +1,4 @@
+[env]
+# Ship every supported grammar inside Matis, without runtime downloads or shared parser libraries.
+TSLP_LANGUAGES = { value = "python,javascript,typescript,tsx,java,kotlin,go,rust,elixir", force = true }
+TSLP_LINK_MODE = { value = "static", force = true }

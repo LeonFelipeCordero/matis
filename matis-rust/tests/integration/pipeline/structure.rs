@@ -1,4 +1,4 @@
-//! The three original structure seams and excluded-language native-only records.
+//! The three original structure seams and excluded-source byte records.
 use super::serialization;
 use matis::{
     domain::models::SourceFile,
@@ -51,15 +51,7 @@ fn entry_paths(entry: fs::DirEntry) -> Vec<PathBuf> {
 }
 
 fn excluded_record(path: &Path) -> Value {
-    let content = fs::read(path).unwrap();
-    let mut record = json!({"bytes": serialization::bytes(&content)});
-    if path.extension().is_some_and(|extension| extension == "h") {
-        let tree = syntax::parse("c", &content).unwrap();
-        let native = process(&String::from_utf8_lossy(&content), &ProcessConfig::new("c")).unwrap().structure;
-        record["native_only"] = json!({"language": "c", "syntax": tree.root_node().to_sexp(),
-            "has_error": tree.root_node().has_error(), "native": serialization::structures(&native)});
-    }
-    record
+    json!({"bytes": serialization::bytes(&fs::read(path).unwrap())})
 }
 
 pub fn excluded_sources(root: &Path) -> Value {
