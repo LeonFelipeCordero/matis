@@ -4,6 +4,41 @@ use serde_json::Value;
 use std::{collections::BTreeSet, fs, process::Command};
 
 #[test]
+fn build_rejects_missing_or_dynamic_parser_configuration() -> anyhow::Result<()> {
+    let workspace = tempfile::tempdir()?;
+    let guard = workspace.path().join(format!("parser-build-guard{}", std::env::consts::EXE_SUFFIX));
+    let compiled = Command::new("rustc")
+        .args(["--edition=2024", "--crate-name", "parser_build_guard"])
+        .arg(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("build.rs"))
+        .arg("-o")
+        .arg(&guard)
+        .output()?;
+    assert!(compiled.status.success(), "{compiled:?}");
+    let languages =
+        SUPPORTED_LANGUAGES.iter().copied().filter(|language| *language != "jsx").collect::<Vec<_>>().join(",");
+    for (selected, mode, succeeds) in [
+        ("", "", false),
+        ("python", "static", false),
+        (languages.as_str(), "dynamic", false),
+        (languages.as_str(), "static", true),
+        (" ALL ", "static", true),
+        ("*", "static", true),
+    ] {
+        let output = Command::new(&guard)
+            .current_dir(workspace.path())
+            .env_clear()
+            .env("TSLP_LANGUAGES", selected)
+            .env("TSLP_LINK_MODE", mode)
+            .output()?;
+        assert_eq!(output.status.success(), succeeds, "{output:?}");
+        if !succeeds {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("Build from the repository root"), "{output:?}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn relocated_binary_analyzes_all_languages_without_external_parsers() -> anyhow::Result<()> {
     let workspace = tempfile::tempdir()?;
     let root = workspace.path().join("repo");
