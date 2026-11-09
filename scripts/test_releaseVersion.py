@@ -3,7 +3,7 @@ import tomllib
 import unittest
 from pathlib import Path
 
-from release_version import next_version, semver, stamp_version
+from releaseVersion import next_version, semver, stamp_version
 
 
 class ReleaseVersionTests(unittest.TestCase):
