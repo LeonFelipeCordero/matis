@@ -63,6 +63,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('--json assets', commands[3])
         self.assertEqual(commands[4], 'release edit v1.2.3 --draft=false')
 
+    def test_missing_source_commit_prevents_draft_creation(self):
+        self.packages()
+        self.run_release('publish', '1.2.3', success=False)
+        self.assertNotIn('release create', self.commands())
+        self.assertNotIn('release upload', self.commands())
+
     def test_failed_upload_or_extra_remote_assets_leave_draft(self):
         self.packages()
         self.env['RELEASE_STATE'] = 'true'

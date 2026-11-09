@@ -110,7 +110,7 @@ PKGBUILD
 }
 
 publish() {
-  local version=$1 tag="v$1" file state expected actual
+  local version=$1 tag="v$1" file state expected actual commit
   local files=("artifacts/matis-$version-ubuntu.deb" "artifacts/matis-$version-arch.pkg.tar.zst" "artifacts/matis-$version-macos.zip")
   for file in "${files[@]}"; do [[ -s $file && ! -L $file ]] || fail "Missing or empty package: $file"; done
   expected=$(printf '%s\n' "${files[@]##*/}" | LC_ALL=C sort)
@@ -119,7 +119,8 @@ publish() {
   if state=$(gh release view "$tag" --json isDraft --jq '.isDraft' 2>/dev/null); then
     [[ $state == true ]] || fail "$tag is already published"
   else
-    gh release create "$tag" --draft --target "$(git rev-parse HEAD)" --title "$tag" --generate-notes
+    commit=$(git rev-parse --verify HEAD)
+    gh release create "$tag" --draft --target "$commit" --title "$tag" --generate-notes
   fi
   gh release upload "$tag" "${files[@]}" --clobber
   actual=$(gh release view "$tag" --json assets --jq '.assets[].name' | LC_ALL=C sort)
