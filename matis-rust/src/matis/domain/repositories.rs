@@ -71,6 +71,18 @@ pub trait RepositoryProtocol {
     fn graph(&mut self, identifier: &str) -> anyhow::Result<Option<GraphDto>>;
     /// Return one saved revision's report inputs, `None` without a graph, or a read error.
     fn report_facts(&mut self, identifier: &str) -> anyhow::Result<Option<ReportFactsDto>>;
+    /// Return ordered saved candidates, `None` without a graph, or a read error.
+    /// Default to report facts for implementations without a candidate-only read.
+    /// Treat an absent candidate field as empty legacy data; reject a present non-array.
+    fn mutation_candidates(&mut self, identifier: &str) -> anyhow::Result<Option<Vec<Value>>> {
+        self.report_facts(identifier)?
+            .map(|facts| match facts.get("mutationCandidates") {
+                None => Ok(Vec::new()),
+                Some(Value::Array(candidates)) => Ok(candidates.clone()),
+                Some(_) => anyhow::bail!("Invalid mutationCandidates: expected an array"),
+            })
+            .transpose()
+    }
     /// Atomically replace a registered ID's graph with `artifact` and return its summary.
     /// Validation or storage errors must preserve the previous saved graph.
     fn save(&mut self, identifier: &str, artifact: &Value) -> anyhow::Result<GraphDto>;
@@ -78,3 +90,7 @@ pub trait RepositoryProtocol {
     /// Validation or storage errors must leave neither a registration nor a partial graph.
     fn save_new(&mut self, name: &str, location: &str, artifact: &Value) -> anyhow::Result<GraphDto>;
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/domain/repositories.rs"]
+mod tests;

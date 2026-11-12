@@ -96,7 +96,14 @@ pub async fn report_facts(connection: &impl ConnectionTrait, row: RepositoryGrap
         .into_iter()
         .map(diagnostic_value)
         .collect();
-    let candidates = graph_mutation_candidates::Entity::find()
+    let candidates = mutation_candidates(connection, id).await?;
+    Ok(json!({"graphRevision": row.graph_revision, "nodes": nodes, "edges": edges, "imports": imports,
+        "diagnostics": diagnostics, "mutationCandidates": candidates}))
+}
+/// Read candidate payloads in saved ordinal order; propagate query and JSON errors.
+/// The caller checks graph existence and supplies a transaction for a consistent revision.
+pub async fn mutation_candidates(connection: &impl ConnectionTrait, id: &str) -> Result<Vec<Value>> {
+    Ok(graph_mutation_candidates::Entity::find()
         .filter(graph_mutation_candidates::Column::RepositoryId.eq(id))
         .order_by_asc(graph_mutation_candidates::Column::Ordinal)
         .select_only()
@@ -106,9 +113,7 @@ pub async fn report_facts(connection: &impl ConnectionTrait, row: RepositoryGrap
         .await?
         .into_iter()
         .map(|s| serde_json::from_str::<Value>(&s))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    Ok(json!({"graphRevision": row.graph_revision, "nodes": nodes, "edges": edges, "imports": imports,
-        "diagnostics": diagnostics, "mutationCandidates": candidates}))
+        .collect::<std::result::Result<Vec<_>, _>>()?)
 }
 fn report_node(n: GraphNodeRow, symbol: Option<GraphSymbolRow>, metrics: &HashMap<String, Value>) -> Value {
     let metric = metrics.get(&n.node_key).unwrap_or(&Value::Null);

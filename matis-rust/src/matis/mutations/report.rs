@@ -14,6 +14,12 @@ pub fn build_mutation_report(root: &Path, report: &Value, config: &MutationConfi
         .get("mutationCandidates")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("Missing or invalid mutationCandidates"))?;
+    build_candidate_report(root, candidates, config)
+}
+
+/// Verify plain candidates and return the public schema-versioned manifest output.
+/// Propagate source, candidate-validation, and manifest-generation errors.
+pub fn build_candidate_report(root: &Path, candidates: &[Value], config: &MutationConfig) -> Result<Value> {
     Ok(json!({"schemaVersion": 1, "mutations": generate_manifest_values(root, candidates, &config.rules)?}))
 }
 

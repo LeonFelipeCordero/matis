@@ -1,19 +1,12 @@
 use crate::{
-    domain::{
-        models::SOURCE_METRIC_NAMES,
-        repositories::{GraphDto, RepositoryDto, RepositoryError, RepositoryProtocol},
-    },
+    domain::repositories::{GraphDto, RepositoryDto, RepositoryError, RepositoryProtocol},
     paths::absolute_path,
 };
 use anyhow::Result;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::path::Path;
 
-/// Read and analyze `root` into an in-memory graph without opening storage or writing output.
-/// Propagate repository validation, file/ignore reading, parsing, and graph construction errors.
-pub fn analyze_folder(root: &Path) -> Result<Value> {
-    crate::indexer::analyze_repository(root)
-}
+pub use crate::indexer::analyze_repository as analyze_folder;
 fn required_text(value: &str, field: &str, maximum: usize) -> Result<String> {
     let text = value.trim();
     if text.is_empty() {
@@ -69,22 +62,48 @@ impl RepositoryService {
         let id = self.identifier(identifier)?;
         self.repository.report_facts(&id)
     }
+    fn project_identifier(&mut self, project_name: &str) -> Result<String> {
+        let name = required_text(project_name, "project name", 200)?;
+        self.repository.resolve(&name)?.ok_or_else(|| RepositoryError::new("Repository not found", 404).into())
+    }
     /// Build a report from saved facts for a case-insensitive project name without reading source files.
     /// Return status 400 for invalid/overlong names, 404 for missing registrations,
     /// 409 for unindexed projects, or propagate store/report errors. Do not save changes.
     pub fn report(&mut self, project_name: &str) -> Result<Value> {
-        let name = required_text(project_name, "project name", 200)?;
-        let id = self.repository.resolve(&name)?.ok_or_else(|| RepositoryError::new("Repository not found", 404))?;
+        let id = self.project_identifier(project_name)?;
         let facts = self
             .repository
             .report_facts(&id)?
             .ok_or_else(|| RepositoryError::new("Repository has no indexed graph; run matis index first", 409))?;
-        let mut nodes = facts["nodes"].as_array().cloned().unwrap_or_default();
-        for node in &mut nodes {
-            add_properties(node);
-        }
-        crate::metrics::report::build_artifact_report(&json!({"nodes": nodes, "edges": facts["edges"],
-            "diagnostics": facts["diagnostics"], "mutationCandidates": facts["mutationCandidates"]}))
+        crate::metrics::report::build_report(&facts)
+    }
+    fn folder_project_name(&mut self, root: &Path) -> Result<String> {
+        let root = absolute_path(root)?;
+        let projects = self
+            .repository
+            .list()?
+            .into_iter()
+            .filter(|p| !p.location.contains("://"))
+            .map(|p| Ok((absolute_path(Path::new(&p.location))?, p)))
+            .collect::<Result<Vec<_>>>()?;
+        let mut matching: Vec<_> = projects.into_iter().filter(|(location, _)| *location == root).collect();
+        anyhow::ensure!(matching.len() == 1, "Expected one indexed project at this folder; run matis index first");
+        Ok(matching.remove(0).1.name)
+    }
+    /// Build a report for the sole registration whose resolved local location equals `root`.
+    /// Ignore URLs; propagate path, storage, name, ambiguity, and report errors. Do not index.
+    pub fn saved_folder_report(&mut self, root: &Path) -> Result<Value> {
+        let name = self.folder_project_name(root)?;
+        self.report(&name)
+    }
+    /// Read ordered saved candidates for the sole local registration at `root`, without reading sources.
+    /// Use the same selection/name errors as `saved_folder_report`; return status 409 without a graph.
+    pub fn saved_folder_candidates(&mut self, root: &Path) -> Result<Vec<Value>> {
+        let name = self.folder_project_name(root)?;
+        let id = self.project_identifier(&name)?;
+        self.repository
+            .mutation_candidates(&id)?
+            .ok_or_else(|| RepositoryError::new("Repository has no indexed graph; run matis index first", 409).into())
     }
     /// Save `artifact` by resolved local `root`, returning its graph summary without analyzing sources.
     /// Update the first matching local registration, ignoring URLs; otherwise choose an unused
@@ -111,32 +130,8 @@ impl RepositoryService {
     /// Return its summary; resolve by name, not root location. Invalid names produce status
     /// 400 and missing projects 404. Analysis errors occur before saving; store errors propagate.
     pub fn index(&mut self, project_name: &str, root: &Path) -> Result<GraphDto> {
-        let name = required_text(project_name, "project name", 200)?;
-        let id = self.repository.resolve(&name)?.ok_or_else(|| RepositoryError::new("Repository not found", 404))?;
+        let id = self.project_identifier(project_name)?;
         let artifact = analyze_folder(root)?;
         self.repository.save(&id, &artifact)
     }
-}
-fn add_properties(node: &mut Value) {
-    let mut properties = json!({});
-    for name in SOURCE_METRIC_NAMES {
-        properties[name] = node[name].clone();
-    }
-    node["properties"] = properties;
-}
-/// Build a report for the sole registration whose resolved local location equals `root`.
-/// Open the default database, which may create its file/directories; do not migrate or index.
-/// Return an error for path/open failures, zero or multiple matches, or report failures.
-pub fn saved_folder_report(root: &Path) -> Result<Value> {
-    let root = absolute_path(root)?;
-    let mut service = crate::bootstrap::repository_service(None)?;
-    let projects = service
-        .list()?
-        .into_iter()
-        .filter(|p| !p.location.contains("://"))
-        .map(|p| Ok((absolute_path(Path::new(&p.location))?, p)))
-        .collect::<Result<Vec<_>>>()?;
-    let matching: Vec<_> = projects.into_iter().filter(|(location, _)| *location == root).collect();
-    anyhow::ensure!(matching.len() == 1, "Expected one indexed project at this folder; run matis index first");
-    service.report(&matching[0].1.name)
 }

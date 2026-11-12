@@ -119,6 +119,20 @@ impl RepositoryProtocol for RepositoryStore {
         })
         .map_err(storage_error)
     }
+    /// Read ordered candidates in one transaction, or `None` without a revisioned graph.
+    /// Wrap query, JSON, and transaction failures as status 500; do not read other graph facts.
+    fn mutation_candidates(&mut self, identifier: &str) -> Result<Option<Vec<Value>>> {
+        run(async {
+            let tx = self.connection.begin().await?;
+            let result = match graph_queries::graph_row(&tx, identifier).await? {
+                Some(_) => Some(graph_queries::mutation_candidates(&tx, identifier).await?),
+                None => None,
+            };
+            tx.commit().await?;
+            Ok::<_, anyhow::Error>(result)
+        })
+        .map_err(storage_error)
+    }
     /// Validate `artifact`, replace the ID's graph atomically, and return a new revision summary.
     /// Shape/cycle errors propagate before writes. Wrap transactional failures as status 500;
     /// rollback preserves the old graph, including on metadata or foreign-key failures.

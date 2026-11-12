@@ -76,6 +76,34 @@ fn cli_runs_only_selected_targets_even_when_sources_overlap() {
     assert_eq!(results[0]["targets"].as_array().unwrap().len(), 1);
     assert_eq!(results[0]["targets"][0]["name"], "unit");
     assert_eq!(fs::read(root.join("source.py")).unwrap(), SOURCE);
+
+    let database = root.join("database.sqlite");
+    matis::bootstrap::migrate_database(Some(&database)).unwrap();
+    let artifact = matis::indexer::analyze_repository(root).unwrap();
+    matis::bootstrap::repository_service(Some(&database)).unwrap().save_folder(root, &artifact).unwrap();
+    for source in [SOURCE, b"value = 3 < 4\n".as_slice()] {
+        fs::write(root.join("source.py"), source).unwrap();
+        assert_saved_cli_uses_saved_candidates(root, &database, source);
+    }
+    let live = command(root, "live-results").output().unwrap();
+    assert!(live.status.success(), "{}", String::from_utf8_lossy(&live.stderr));
+}
+
+fn assert_saved_cli_uses_saved_candidates(root: &Path, database: &Path, source: &[u8]) {
+    for run in [false, true] {
+        let mut saved = Command::new(env!("CARGO_BIN_EXE_matis"));
+        saved.args(["mutations", "--saved", "--folder"]).arg(root).env("DATABASE_PATH", database);
+        if run {
+            saved.args(["run", "--target", "unit", "--output", "saved-results"]);
+        }
+        let output = saved.output().unwrap();
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.success(), source == SOURCE, "{error}");
+        if source != SOURCE {
+            assert!(error.contains("Stale or invalid mutation candidate"), "{error}");
+        }
+        assert_eq!(fs::read(root.join("source.py")).unwrap(), source);
+    }
 }
 
 #[test]

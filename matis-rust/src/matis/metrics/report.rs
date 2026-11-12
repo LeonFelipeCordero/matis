@@ -167,12 +167,10 @@ fn record_node(node: &Value) -> Value {
 pub fn build_report(graph: &Value) -> Result<Value> {
     let nodes: Vec<_> =
         graph["nodes"].as_array().ok_or_else(|| anyhow!("nodes must be an array"))?.iter().map(record_node).collect();
-    let edges = graph
-        .get("edges")
-        .filter(|value| value.as_array().is_some_and(|edges| !edges.is_empty()))
-        .or_else(|| graph.get("imports"))
-        .cloned()
-        .unwrap_or_else(|| json!([]));
+    let edges = match optional_array(graph, "edges")?.filter(|edges| !edges.is_empty()) {
+        Some(edges) => json!(edges),
+        None => json!(optional_array(graph, "imports")?.cloned().unwrap_or_default()),
+    };
     build_artifact_report(&json!({"nodes": nodes, "edges": edges,
         "diagnostics": graph.get("diagnostics").cloned().unwrap_or_else(|| json!([])),
         "mutationCandidates": graph.get("mutationCandidates").cloned().unwrap_or_else(|| json!([]))}))
