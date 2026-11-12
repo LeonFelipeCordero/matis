@@ -1,6 +1,6 @@
 //! Run trusted mutation targets in the current workspace; stdout is JSON only.
 use super::options::Options;
-use crate::mutations::{config, report::build_mutation_report, runner};
+use crate::mutations::{candidates::collect_candidates, config, manifests::generate_manifest_values, runner};
 use anyhow::{Result, bail};
 use serde_json::json;
 use std::path::Path;
@@ -26,7 +26,7 @@ fn ascii_json(value: &serde_json::Value) -> Result<String> {
 ///
 /// Inherit the parent's folder and saved-candidate mode unless the child overrides
 /// the folder. Validate all configuration before target selection and lock the
-/// project before analysis. Temporarily edit sources, execute trusted commands,
+/// project before source discovery. Temporarily edit sources, execute trusted commands,
 /// and replace JSONL results and reused logs. Print progress to stderr and a JSON
 /// summary to stdout. No baseline or isolated workspace is created.
 ///
@@ -56,20 +56,19 @@ pub fn run(parent: &Options, matches: &clap::ArgMatches) -> Result<i32> {
         if saved { "Reading saved candidates for" } else { "Analyzing source files in" },
         root.display()
     ));
-    let mut report = if saved {
-        crate::services::repositories::saved_folder_report(&root)?
+    let mut candidates = if saved {
+        crate::bootstrap::repository_service(None)?.saved_folder_candidates(&root)?
     } else {
-        crate::metrics::report::build_artifact_report(&crate::indexer::analyze_repository(&root)?)?
+        collect_candidates(&root)?
     };
-    let candidates = report["mutationCandidates"].as_array_mut().unwrap();
     candidates.retain(|item| !runner::matching_targets(item["path"].as_str().unwrap_or(""), &config).is_empty());
     progress(&format!(
         "Found {} candidate sites in selected targets; generating configured replacements",
         candidates.len()
     ));
-    let planned = build_mutation_report(&root, &report, &config)?;
+    let planned = generate_manifest_values(&root, &candidates, &config.rules)?;
     let destination = root.join(options.get("--output", "mutation-results.jsonl"));
-    let execution = runner.run_with_progress(planned["mutations"].as_array().unwrap(), &destination, &mut progress);
+    let execution = runner.run_with_progress(&planned, &destination, &mut progress);
     let counts = match execution {
         Err(error) if error.to_string() == "Mutation run interrupted" => {
             eprintln!("\nAborted!");

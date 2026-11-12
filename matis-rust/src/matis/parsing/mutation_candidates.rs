@@ -1,6 +1,5 @@
 //! Grammar-specific AST extraction from exact source bytes, without executing source.
 use crate::domain::{models::SourceFile, mutation_candidates::*};
-use crate::mutations::{canonical_json, digest};
 use crate::syntax::{children, named_children, text};
 use anyhow::Result;
 use serde_json::{Value, json};

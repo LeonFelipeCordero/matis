@@ -27,8 +27,8 @@
       "entrypoints": {
         "sources": ["matis-rust/src/matis/*.rs", "matis-rust/src/matis/paths/*.rs"],
         "cwd": "matis-rust",
-        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
-        "timeoutSeconds": 300
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--test", "integration"],
+        "timeoutSeconds": 1200
       },
       "cli-commands": {
         "sources": ["matis-rust/src/matis/cli/commands.rs", "matis-rust/src/matis/cli/mod.rs", "matis-rust/src/matis/cli/options.rs", "matis-rust/src/matis/cli/schema.rs", "matis-rust/src/matis/cli/integers.rs"],
@@ -45,8 +45,8 @@
       "cli-mutations": {
         "sources": ["matis-rust/src/matis/cli/mutations.rs", "matis-rust/src/matis/cli/mutation_targets.rs", "matis-rust/src/matis/cli/mutation_run.rs"],
         "cwd": "matis-rust",
-        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
-        "timeoutSeconds": 300
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "integration", "--", "cli"],
+        "timeoutSeconds": 1200
       },
       "domain-models": {
         "sources": ["matis-rust/src/matis/domain/mod.rs", "matis-rust/src/matis/domain/models.rs"],
@@ -69,8 +69,8 @@
       "mutation-candidates": {
         "sources": ["matis-rust/src/matis/domain/mutation_candidates.rs", "matis-rust/src/matis/parsing/mutation_candidates.rs"],
         "cwd": "matis-rust",
-        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
-        "timeoutSeconds": 300
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit"],
+        "timeoutSeconds": 1200
       },
       "discovery": {
         "sources": ["matis-rust/src/matis/parsing/mod.rs", "matis-rust/src/matis/parsing/discovery*.rs", "matis-rust/src/matis/parsing/ignore_spec.rs"],
@@ -87,14 +87,14 @@
       "persistence": {
         "sources": ["matis-rust/src/matis/persistence/*.rs", "matis-rust/src/matis/persistence/migrations/*.rs", "matis-rust/src/matis/persistence/migrations/versions/*.sql"],
         "cwd": "matis-rust",
-        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
-        "timeoutSeconds": 300
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "integration", "--", "persistence::"],
+        "timeoutSeconds": 1200
       },
       "repository-services": {
         "sources": ["matis-rust/src/matis/services/mod.rs", "matis-rust/src/matis/services/factories.rs", "matis-rust/src/matis/services/repositories.rs"],
         "cwd": "matis-rust",
-        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
-        "timeoutSeconds": 300
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "integration", "--", "persistence::"],
+        "timeoutSeconds": 1200
       },
       "navigation-services": {
         "sources": ["matis-rust/src/matis/services/navigation*.rs"],
@@ -105,8 +105,8 @@
       "mutations": {
         "sources": ["matis-rust/src/matis/mutations/*.rs"],
         "cwd": "matis-rust",
-        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
-        "timeoutSeconds": 300
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--test", "integration", "--", "mutations"],
+        "timeoutSeconds": 1200
       },
       "artifacts": {
         "sources": ["matis-rust/src/matis/metrics/mod.rs", "matis-rust/src/matis/metrics/artifact.rs"],

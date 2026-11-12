@@ -1,6 +1,6 @@
 //! Mutation manifests are derived only. Never save a graph or change source.
 use super::options::Options;
-use crate::mutations::{config, report::build_mutation_report, rules::REGISTRY};
+use crate::mutations::{candidates::collect_candidates, config, report::build_candidate_report, rules::REGISTRY};
 use anyhow::Result;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -12,12 +12,12 @@ fn output(options: &Options) -> Result<Value> {
     let root = crate::paths::absolute_path(Path::new(options.get("--folder", ".")))?;
     let project = crate::metrics::config::load_project_config(&root)?;
     let config = config::from_project(&project)?;
-    let report = if options.has("--saved") {
-        crate::services::repositories::saved_folder_report(&root)?
+    let candidates = if options.has("--saved") {
+        crate::bootstrap::repository_service(None)?.saved_folder_candidates(&root)?
     } else {
-        crate::metrics::report::build_artifact_report(&crate::indexer::analyze_repository(&root)?)?
+        collect_candidates(&root)?
     };
-    build_mutation_report(&root, &report, &config)
+    build_candidate_report(&root, &candidates, &config)
 }
 
 /// Print the rule catalog or verified manifests, or dispatch a mutation run.
@@ -46,7 +46,7 @@ mod integration_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn options(args: &[String]) -> Result<Options> {
+    pub(super) fn options(args: &[String]) -> Result<Options> {
         let matches = super::super::schema::cli()
             .try_get_matches_from(["matis", "mutations"].into_iter().chain(args.iter().map(String::as_str)))?;
         Ok(Options::from_matches("mutations", matches.subcommand_matches("mutations").unwrap()))
