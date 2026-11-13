@@ -1,0 +1,84 @@
+name: Trusted main CI
+run-name: Trusted main ${{ inputs.trustedCommit }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      trustedCommit:
+        description: Full main SHA approved for this trusted run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trusted-main-ci
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate trusted dispatch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.repository == 'LeonFelipeCordero/matis' &&
+      github.ref == 'refs/heads/main' &&
+      github.actor == 'LeonFelipeCordero' &&
+      github.triggering_actor == 'LeonFelipeCordero'
+    steps:
+      - name: Validate approved main SHA
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.trustedCommit }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || [[ "$REQUESTED_COMMIT" != "$GITHUB_SHA" ]]; then
+            echo 'trustedCommit must be the full lowercase SHA of this main dispatch.' >&2
+            exit 1
+          fi
+          printf 'Validated trusted main commit `%s`.\n' "$REQUESTED_COMMIT" >> "$GITHUB_STEP_SUMMARY"
+
+  checks:
+    name: Trusted checks
+    needs: validate
+    # The parent launcher and job-start hook authorize context; this label only routes the job.
+    runs-on: matato-ci-${{ github.run_id }}-${{ github.run_attempt }}
+    timeout-minutes: 90
+    env:
+      CI: 'true'
+      CARGO_BUILD_JOBS: '2'
+      RUST_TEST_THREADS: '4'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      # Shared image: Ubuntu 24.04, nonroot/rootless/ephemeral runner 2.338.2,
+      # dotfiles 5e69f36ae6b4c9a6fd5e349ae4cc844f2181f459, Rust 1.100.0
+      # with clippy/rustfmt, Bun 1.4.1, Python 3.12, Node 24.22.2, Matis 0.1.7 baked.
+      - name: Verify baked toolchain versions
+        shell: bash
+        run: |
+          test "$(bun --version)" = '1.4.1'
+          [[ "$(rustc --version)" == 'rustc 1.100.0 '* ]]
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - run: cargo fmt --manifest-path matis-rust/Cargo.toml --check
+      - run: cargo test --manifest-path matis-rust/Cargo.toml --locked --all-targets
+      - run: cargo clippy --manifest-path matis-rust/Cargo.toml --locked --all-targets -- -D warnings
+      - run: cargo build --manifest-path matis-rust/Cargo.toml --release --locked --bins
+      - name: Require all configured checks to pass across the entire repository
+        shell: bash
+        run: |
+          set -o pipefail
+          matis-rust/target/release/matis check --f . --format json | tee "$RUNNER_TEMP/matis-check.json"
+      - run: bun install --frozen-lockfile --no-save
+        working-directory: dashboard
+      - run: bun run build
+        working-directory: dashboard
+      - run: bun test
+        working-directory: dashboard
+      - run: bun run typecheck
+        working-directory: dashboard
+      - run: bun run lint
+        working-directory: dashboard
