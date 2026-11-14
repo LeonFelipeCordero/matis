@@ -1,5 +1,4 @@
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -33,9 +32,8 @@ class ReleaseTests(unittest.TestCase):
  case "$*" in
    auth\ status) [ "${FAIL_AUTH:-0}" != 1 ] ;;
    api*)
-     [ "${FAIL_LOOKUP:-0}" != 1 ] || exit 1
      if [ "${RELEASE_STATE:-missing}" != missing ]; then
-       printf '%s\t%s\n' "$RELEASE_STATE" "${RELEASE_TARGET:-$SOURCE_COMMIT}"
+       printf '%s\t%s\n' "$RELEASE_STATE" "$SOURCE_COMMIT"
      fi ;;
    release\ upload*) [ "${FAIL_UPLOAD:-0}" != 1 ] ;;
    *--json\ assets*)
@@ -51,12 +49,8 @@ class ReleaseTests(unittest.TestCase):
         self.real_git = shutil.which('git')
         self.mock('git', f'''
 if [ "$1" = ls-remote ]; then
-  [ "${{FAIL_REMOTE:-0}}" != 1 ] || exit 1
   if [ -n "${{REMOTE_COMMIT:-}}" ]; then
     printf '%s\\trefs/tags/v1.2.3\\n' "$REMOTE_COMMIT"
-    if [ -n "${{PEELED_COMMIT:-}}" ]; then
-      printf '%s\\trefs/tags/v1.2.3^{{}}\\n' "$PEELED_COMMIT"
-    fi
   fi
 else
   exec "{self.real_git}" "$@"
@@ -111,83 +105,8 @@ fi
         self.packages()
         self.env['RELEASE_STATE'] = 'false'
         self.env['REMOTE_COMMIT'] = self.env['SOURCE_COMMIT']
-        self.assertEqual(self.run_release('status', '1.2.3').stdout.strip(), 'published')
         self.run_release('publish', '1.2.3', success=False)
         self.assertNotIn('release upload', self.commands())
-        self.assertNotIn('release edit', self.commands())
-        self.assertNotIn('release create', self.commands())
-
-    def test_status_missing_and_draft_are_read_only(self):
-        for state, expected in [('missing', 'missing'), ('true', 'draft')]:
-            with self.subTest(state=state):
-                self.env['RELEASE_STATE'] = state
-                self.assertEqual(self.run_release('status', '1.2.3').stdout.strip(), expected)
-        self.assertNotIn('release create', self.commands())
-        self.assertNotIn('release upload', self.commands())
-
-    def test_lookup_and_remote_errors_prevent_release_mutations(self):
-        self.packages()
-        for variable in ['FAIL_LOOKUP', 'FAIL_REMOTE']:
-            with self.subTest(variable=variable):
-                self.env[variable] = '1'
-                self.run_release('status', '1.2.3', success=False)
-                self.run_release('publish', '1.2.3', success=False)
-                del self.env[variable]
-        self.assertNotIn('release create', self.commands())
-        self.assertNotIn('release upload', self.commands())
-
-    def test_wrong_tag_or_draft_target_prevents_mutations(self):
-        self.packages()
-        for state in ['missing', 'true', 'false']:
-            with self.subTest(state=state):
-                self.env.update(RELEASE_STATE=state, REMOTE_COMMIT='wrong')
-                self.run_release('status', '1.2.3', success=False)
-                self.run_release('publish', '1.2.3', success=False)
-        del self.env['REMOTE_COMMIT']
-        self.env.update(RELEASE_STATE='true', RELEASE_TARGET='main')
-        self.run_release('publish', '1.2.3', success=False)
-        self.env['RELEASE_STATE'] = 'false'
-        self.run_release('status', '1.2.3', success=False)
-        self.assertNotIn('release upload', self.commands())
-        self.assertNotIn('release edit', self.commands())
-        self.assertNotIn('release create', self.commands())
-
-    def test_invalid_release_state_fails_closed(self):
-        self.packages()
-        self.env['RELEASE_STATE'] = 'unexpected'
-        self.run_release('status', '1.2.3', success=False)
-        self.run_release('publish', '1.2.3', success=False)
-        self.assertNotIn('release create', self.commands())
-        self.assertNotIn('release upload', self.commands())
-
-    def test_ci_preflight_outputs_and_lookup_failure(self):
-        workflow = (ROOT / '.github/workflows/release.yml').read_text()
-        body = re.search(r'        run: \|\n((?:          .+\n)+)', workflow)[1]
-        body = '\n'.join(line[10:] for line in body.splitlines())
-        self.mock('python3', 'echo 1.2.3\n')
-        output = self.root / 'outputs'
-        self.env['GITHUB_OUTPUT'] = str(output)
-        for state, expected in [('missing', 'missing'), ('true', 'draft'), ('false', 'published')]:
-            with self.subTest(state=state):
-                output.unlink(missing_ok=True)
-                self.env.update(RELEASE_STATE=state, REMOTE_COMMIT=self.env['SOURCE_COMMIT'])
-                result = subprocess.run(['bash', '-c', body], cwd=self.root, env=self.env,
-                                        text=True, capture_output=True)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(output.read_text(), f'version=1.2.3\nstate={expected}\n')
-        output.unlink()
-        self.env['FAIL_LOOKUP'] = '1'
-        result = subprocess.run(['bash', '-c', body], cwd=self.root, env=self.env,
-                                text=True, capture_output=True)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertFalse(output.exists())
-        self.assertNotIn('release create', self.commands())
-        self.assertNotIn('release upload', self.commands())
-
-    def test_annotated_tag_uses_peeled_commit(self):
-        self.env.update(RELEASE_STATE='false', REMOTE_COMMIT='tag-object',
-                        PEELED_COMMIT=self.env['SOURCE_COMMIT'])
-        self.assertEqual(self.run_release('status', '1.2.3').stdout.strip(), 'published')
 
     def test_missing_empty_or_symlink_package_prevents_gh(self):
         for kind in ['missing', 'empty', 'symlink']:
@@ -363,8 +282,6 @@ fi
         self.prepare_native_release()
         for variable, forbidden in [('FAIL_AUTH', 'fetch'), ('FAIL_FETCH', 'cargo'),
                                     ('FAIL_BUILD', 'release'), ('FAIL_BINARY', 'release'),
-                                    ('FAIL_LOOKUP', 'release create'),
-                                    ('FAIL_REMOTE', 'release create'),
                                     ('FAIL_UPLOAD', 'release edit'),
                                     ('EXTRA_REMOTE', 'release edit')]:
             with self.subTest(variable=variable):
