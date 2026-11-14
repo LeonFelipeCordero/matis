@@ -2,7 +2,7 @@ name: Release
 
 on:
   workflow_run:
-    workflows: [Trusted CI]
+    workflows: [Rust CI, Dashboard CI, Matis CI]
     types: [completed]
     branches: [main]
 
@@ -14,8 +14,7 @@ concurrency:
   queue: max
 
 jobs:
-  release:
-    name: Publish main release
+  checks:
     if: >-
       github.repository == 'LeonFelipeCordero/matis' &&
       github.event.workflow_run.actor.login == github.repository_owner &&
@@ -24,9 +23,32 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository &&
-      github.event.workflow_run.path == '.github/workflows/trustedCi.yml'
-    runs-on: ubuntu-24.04
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: [self-hosted, linux, x64, matato-local]
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      ready: ${{ steps.checks.outputs.ready }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Require successful main checks for the exact commit
+        id: checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          ready=$(bash scripts/releaseReady.sh .github/workflows/rust-ci.yml .github/workflows/dashboard-ci.yml .github/workflows/matis-ci.yml)
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Publish main release
+    needs: checks
+    if: needs.checks.outputs.ready == 'true'
+    runs-on: [self-hosted, linux, x64, matato-local]
     timeout-minutes: 90
     permissions:
       contents: write

@@ -3,14 +3,9 @@ name: Rust CI
 on:
   pull_request:
     branches: [main]
-    paths:
-      - matis-rust/**
-      - .github/workflows/rust-ci.yml
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
-    paths:
-      - matis-rust/**
-      - .github/workflows/rust-ci.yml
 
 permissions:
   contents: read
@@ -22,9 +17,17 @@ concurrency:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    if: >-
+      github.repository == 'LeonFelipeCordero/matis' &&
+      github.actor_id == github.repository_owner_id &&
+      github.triggering_actor == github.repository_owner &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, linux, x64, matato-local]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -34,9 +37,17 @@ jobs:
 
   checks:
     name: Checks
-    runs-on: ubuntu-latest
+    if: >-
+      github.repository == 'LeonFelipeCordero/matis' &&
+      github.actor_id == github.repository_owner_id &&
+      github.triggering_actor == github.repository_owner &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, linux, x64, matato-local]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

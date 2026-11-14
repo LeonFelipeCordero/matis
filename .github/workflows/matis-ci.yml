@@ -3,6 +3,7 @@ name: Matis CI
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -16,9 +17,17 @@ concurrency:
 jobs:
   matis:
     name: Matis
-    runs-on: ubuntu-latest
+    if: >-
+      github.repository == 'LeonFelipeCordero/matis' &&
+      github.actor_id == github.repository_owner_id &&
+      github.triggering_actor == github.repository_owner &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, linux, x64, matato-local]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
