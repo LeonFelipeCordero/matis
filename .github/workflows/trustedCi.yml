@@ -15,10 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Validate trusted event
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  checks:
+    name: Trusted checks
     if: >-
       github.repository == 'LeonFelipeCordero/matis' &&
       github.actor_id == github.repository_owner_id &&
@@ -30,18 +28,6 @@ jobs:
       github.event.pull_request.base.repo.full_name == github.repository &&
       github.event.pull_request.base.ref == 'main' &&
       github.event.pull_request.state == 'open'))
-    steps:
-      - name: Record trusted event
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf 'Validated %s for %s at %s (run %s, attempt %s).\n' \
-            "$GITHUB_EVENT_NAME" "$GITHUB_REPOSITORY" "$GITHUB_SHA" \
-            "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
-
-  checks:
-    name: Trusted checks
-    needs: validate
     # The host and job-start hook authorize context; this label only routes the job.
     runs-on: matato-ci-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 90
