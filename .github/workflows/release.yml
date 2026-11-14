@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [Trusted CI]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: main-release
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  release:
+    name: Publish main release
+    if: >-
+      github.repository == 'LeonFelipeCordero/matis' &&
+      github.event.workflow_run.actor.login == github.repository_owner &&
+      github.event.workflow_run.actor.id == github.repository_owner_id &&
+      github.event.workflow_run.triggering_actor.login == github.repository_owner &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.path == '.github/workflows/trustedCi.yml'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select version and check exact source
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(bash scripts/release.sh version)
+          state=$(bash scripts/release.sh status "$version")
+          printf 'version=%s\nstate=%s\n' "$version" "$state" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        if: steps.version.outputs.state != 'published'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: steps.version.outputs.state != 'published'
+        with:
+          bun-version: '1.4.1'
+      - name: Build native Ubuntu package
+        if: steps.version.outputs.state != 'published'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash scripts/release.sh build ubuntu "$VERSION"
+      - name: Publish or resume draft
+        if: steps.version.outputs.state != 'published'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash scripts/release.sh publish "$VERSION" ubuntu

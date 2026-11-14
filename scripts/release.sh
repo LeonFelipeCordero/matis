@@ -12,16 +12,18 @@ Detect native Ubuntu/Arch, check gh authentication, fetch origin tags, select
 and validate the version, build one native package, then publish it.
 Optional debugging commands:
        bash scripts/release.sh version
+       bash scripts/release.sh status <version>
        bash scripts/release.sh build <ubuntu|arch> <version>
        bash scripts/release.sh publish <version> [ubuntu|arch]
 
-Local builds only, on the matching distro and native architecture.
+Native builds only, on the matching distro and native architecture.
 Build Ubuntu on the oldest supported Ubuntu release; binaries require that
 release's system libraries. Requires Rust, Bun, Python 3.11+, Git, authenticated
 gh, and dpkg-deb on Ubuntu or makepkg on Arch (run as a normal user).
 No new application dependencies are installed by this script.
 Dashboard dependencies are installed with bun install --no-save.
 version uses existing stable tags and the Cargo baseline, without editing files.
+status checks the exact HEAD target and reports missing, draft, or published.
 build stamps Cargo files in a temporary source copy, not the working tree.
 Output: artifacts/matis-<version>-ubuntu.deb OR -arch.pkg.tar.zst.
 Packages install matis, matis-migrate, matis-ui and an application launcher.
@@ -98,6 +100,27 @@ PKGBUILD
   mv "$stage/$output" "artifacts/$output"
 }
 
+release_state() {
+  local tag="v$1" commit response state target remote
+  commit=$(git rev-parse --verify HEAD) || return
+  # Listing distinguishes absence from auth/network errors; never treat an API failure as missing.
+  response=$(gh api --paginate 'repos/{owner}/{repo}/releases' --jq ".[] | select(.tag_name == \"$tag\") | [.draft, .target_commitish] | @tsv") || return
+  IFS=$'\t' read -r state target <<< "$response"
+  [[ -z $state || $state == true || $state == false ]] || fail 'Unexpected release state'
+  remote=$(git ls-remote --sort=refname origin "refs/tags/$tag" "refs/tags/$tag^{}") || return
+  if [[ -n $remote ]]; then
+    # The peeled ref sorts last for annotated tags.
+    [[ $(printf '%s\n' "$remote" | tail -n 1 | cut -f 1) == "$commit" ]] || fail "$tag does not point at HEAD"
+  elif [[ -n $state ]]; then
+    [[ $state == true && $target == "$commit" ]] || fail "$tag has no exact HEAD target"
+  fi
+  case "$state" in
+    true) echo draft ;;
+    false) echo published ;;
+    '') echo missing ;;
+  esac
+}
+
 publish() {
   local version=$1 platform=$2 tag="v$1" file state expected actual commit
   [[ $platform == "$(detect_platform)" ]] || fail "Publish $platform on its matching native distro"
@@ -107,9 +130,9 @@ publish() {
   esac
   [[ -s $file && ! -L $file ]] || fail "Missing or empty package: $file"
   expected=${file##*/}
-  if state=$(gh release view "$tag" --json isDraft --jq '.isDraft' 2>/dev/null); then
-    [[ $state == true ]] || fail "$tag is already published"
-  else
+  state=$(release_state "$version")
+  [[ $state != published ]] || fail "$tag is already published"
+  if [[ $state == missing ]]; then
     commit=$(git rev-parse --verify HEAD)
     gh release create "$tag" --draft --target "$commit" --title "$tag" --generate-notes
   fi
@@ -138,6 +161,7 @@ fi
 case $1 in
   --help|-h) help ;;
   version) [[ $# == 1 ]] || fail 'version takes no arguments'; python3 scripts/releaseVersion.py ;;
+  status) [[ $# == 2 ]] || fail 'status requires version'; validate_version "$2"; release_state "$2" ;;
   build) [[ $# == 3 ]] || fail 'build requires platform and version'; validate_version "$3"; build "$2" "$3" ;;
   publish)
     [[ $# == 2 || $# == 3 ]] || fail 'publish requires version and optional platform'
