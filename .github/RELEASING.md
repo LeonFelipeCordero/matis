@@ -1,3 +1,35 @@
+# Automatic main releases
+
+`Trusted CI` runs for owner-triggered main pushes and same-repository pull
+requests targeting main. It uses read-only contents permission and an ephemeral
+runner. Existing hosted workflows still cover other actors and forks.
+
+After every distinct successful main push checked by
+`.github/workflows/trustedCi.yml`, `Release` checks out that exact successful
+SHA on hosted Ubuntu 24.04 and publishes a native `.deb`. This includes CI-only
+commits. PRs, forks, failed runs, and other source workflows cannot publish.
+The source actor ID, actor, and triggering actor must also match the owner;
+GitHub can report success when an unauthorized source run skips every job.
+The release workflow must exist on the default branch before GitHub can trigger
+it. Publishing is serialized with cancellation disabled and `queue: max`, so
+new runs do not replace pending releases. GitHub allows 100 pending runs; rerun
+any release canceled because that platform queue limit was reached.
+
+The workflow fetches full history and tags, then uses the existing version
+selection, Ubuntu build, and publish commands. Each untagged HEAD gets the next
+patch version, even when only CI changed. An already-published release skips
+successfully only when its remote tag resolves to the exact checked SHA. Drafts
+resume; mismatched tags, ambiguous draft targets, API failures, upload failures,
+and asset mismatches fail without modifying a published release. A draft with
+no remote tag must target the full checked SHA. Annotated tags use their peeled
+commit. No tag is moved or force-pushed.
+
+Only the hosted release job has `contents: write`. Its token is available to
+checkout and the status/publish steps, not the package build or trusted runner
+image. Builds use the existing Rust/Bun tools and package layout. Local native
+Arch releases remain supported; coordinate manual publishers with automation
+because workflow concurrency does not lock local commands.
+
 # Local releases
 
 Run this single command on native Ubuntu or Arch Linux:
@@ -10,8 +42,8 @@ The script detects the distro from `ID` or `ID_LIKE`, checks `gh auth status`,
 fetches `origin --tags`, selects and validates the version, builds one native
 package, then publishes it. Other hosts fail before authentication, fetching,
 building, or publishing. No containers, SSH, macOS builds, cross-compilation, or
-extra host configuration are used. Release builds and uploads never run in
-GitHub Actions; check workflows remain enabled.
+extra host configuration are used by the local command. The automatic workflow
+uses the same native Ubuntu build and publish commands on a hosted runner.
 
 Builds require Rust, Bun, Git, Python 3.11+, authenticated GitHub CLI with release
 write access, and the native packaging tool: `dpkg-deb` on Ubuntu or `makepkg`
@@ -45,8 +77,10 @@ Publishing creates or resumes a draft `v<version>` at HEAD, uploads only the
 current distro's nonempty package, verifies that the remote release contains
 exactly that one asset, then publishes. Other local distro packages are not
 required or uploaded. Failed uploads or remote asset checks leave a draft.
-Published releases cannot be changed by this script. Serialize releases manually;
-do not run concurrent publishers for the same version.
+Published releases cannot be changed by this script. The status command is
+read-only and returns `missing`, `draft`, or `published` after checking the exact
+HEAD target. API and remote lookup errors are not treated as missing releases.
+Serialize manual releases; do not run concurrent publishers for the same version.
 
 Optional commands support debugging and draft recovery. They are not required
 for the normal release:
@@ -54,6 +88,7 @@ for the normal release:
 ```sh
 bash scripts/release.sh --help
 bash scripts/release.sh version
+bash scripts/release.sh status 0.1.0
 bash scripts/release.sh build ubuntu 0.1.0
 bash scripts/release.sh build arch 0.1.0
 bash scripts/release.sh publish 0.1.0
