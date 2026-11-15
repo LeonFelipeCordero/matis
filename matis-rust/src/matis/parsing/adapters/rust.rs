@@ -1,5 +1,6 @@
 //! Rust calls include conservative parsing of known evaluating macro payloads.
 use crate::{
+    parsing::queries,
     parsing::syntax::{
         self, CallSite, CallTarget, CallVisitor, DeclarationCarrier, callback_binding, callback_carrier, named_carrier,
     },
@@ -213,18 +214,11 @@ pub fn visit_calls<'a>(root: Node<'a>, source: &'a [u8], visitor: &mut CallVisit
 }
 
 fn visit(traversal: Traversal<'_>, visitor: &mut CallVisitor<'_>, cache: &mut ShadowCache) {
-    for node in walk(traversal.root) {
-        if matches!(node.kind(), "call_expression" | "macro_invocation") {
-            visitor(
-                CallSite {
-                    node,
-                    offset: traversal.offset,
-                    opaque: traversal.opaque,
-                    parents: traversal.parents.clone(),
-                },
-                traversal.source,
-            );
-        }
+    for node in queries::selected_nodes((traversal.root, traversal.source), queries::calls("rust"), "site") {
+        visitor(
+            CallSite { node, offset: traversal.offset, opaque: traversal.opaque, parents: traversal.parents.clone() },
+            traversal.source,
+        );
         if node.kind() == "macro_invocation" {
             macro_sites((node, &traversal), visitor, cache);
         }

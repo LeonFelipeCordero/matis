@@ -85,6 +85,184 @@ fn call_evidence_limits_characters_not_utf8_bytes() -> Result<()> {
     Ok(())
 }
 
+fn assert_calls(language: &str, text: &str, expected: &[(&str, &str, Option<&str>, bool, &str)]) -> Result<()> {
+    let source = SourceFile { language: language.to_owned(), ..source(text) };
+    let tree = syntax::parse(language, &source.source)?;
+    let calls = extract_calls(&source, tree.root_node(), get_adapter(language)?);
+    let actual: Vec<_> = calls
+        .iter()
+        .map(|call| {
+            (
+                call.evidence.as_str(),
+                call.name.as_str(),
+                call.qualifier.as_deref(),
+                call.bare_target,
+                call.relationship.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(actual, expected, "{language}: {text}");
+    Ok(())
+}
+
+#[test]
+fn standard_call_selection_preserves_nested_calls_constructors_and_references() -> Result<()> {
+    for (language, text, expected) in [
+        (
+            "python",
+            "def run():\n    service.brew(inner())\n    Factory()\n",
+            vec![
+                ("service.brew(inner())", "brew", Some("service"), false, "CALLS"),
+                ("inner()", "inner", None, true, "CALLS"),
+                ("Factory()", "Factory", None, true, "CALLS"),
+            ],
+        ),
+        (
+            "go",
+            "package coffee\nfunc run() { service.Brew(inner()); Factory() }",
+            vec![
+                ("service.Brew(inner())", "Brew", Some("service"), false, "CALLS"),
+                ("inner()", "inner", None, true, "CALLS"),
+                ("Factory()", "Factory", None, true, "CALLS"),
+            ],
+        ),
+        (
+            "java",
+            "class Coffee { void run() { service.brew(inner()); new Cup(); Object a = Coffee::brew; Object b = Cup::new; } }",
+            vec![
+                ("service.brew(inner())", "brew", Some("service"), false, "CALLS"),
+                ("inner()", "inner", None, true, "CALLS"),
+                ("new Cup()", "Cup", None, true, "CALLS"),
+                ("Coffee::brew", "brew", Some("Coffee"), false, "REFERENCES"),
+                ("Cup::new", "new", Some("Cup"), false, "REFERENCES"),
+            ],
+        ),
+        (
+            "kotlin",
+            "fun run() { service.brew(inner()); Cup(); val a = Coffee::brew; val b = ::helper }",
+            vec![
+                ("service.brew(inner())", "brew", Some("service"), false, "CALLS"),
+                ("inner()", "inner", None, true, "CALLS"),
+                ("Cup()", "Cup", None, true, "CALLS"),
+                ("Coffee::brew", "brew", Some("Coffee"), false, "REFERENCES"),
+                ("::helper", "helper", None, true, "REFERENCES"),
+            ],
+        ),
+    ] {
+        assert_calls(language, text, &expected)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn script_call_selection_keeps_require_members_constructors_and_nested_order() -> Result<()> {
+    for language in ["javascript", "typescript", "tsx"] {
+        assert_calls(
+            language,
+            "const dep = require('coffee'); service.brew(inner()); new cups.Cup(); factory()();",
+            &[
+                ("require('coffee')", "require", None, true, "CALLS"),
+                ("service.brew(inner())", "brew", Some("service"), false, "CALLS"),
+                ("inner()", "inner", None, true, "CALLS"),
+                ("new cups.Cup()", "Cup", Some("cups"), false, "CALLS"),
+                ("factory()()", "factory()", None, false, "CALLS"),
+                ("factory()", "factory", None, true, "CALLS"),
+            ],
+        )?;
+    }
+    for language in ["javascript", "tsx"] {
+        assert_calls(
+            language,
+            "const view = <><Card><Child /></Card><Éclair /><éclair /><_Private /><$Widget /><cards.lower /><ui.cards.Cup /><div /><my-widget /><Upper-tag /></>;",
+            &[
+                ("Card", "Card", None, true, "REFERENCES"),
+                ("Child", "Child", None, true, "REFERENCES"),
+                ("Éclair", "Éclair", None, true, "REFERENCES"),
+                ("éclair", "éclair", None, true, "REFERENCES"),
+                ("_Private", "_Private", None, true, "REFERENCES"),
+                ("$Widget", "$Widget", None, true, "REFERENCES"),
+                ("cards.lower", "lower", Some("cards"), false, "REFERENCES"),
+                ("ui.cards.Cup", "Cup", Some("ui.cards"), false, "REFERENCES"),
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn elixir_call_selection_keeps_guard_and_body_calls_but_not_declaration_heads() -> Result<()> {
+    assert_calls(
+        "elixir",
+        r#"defmodule Coffee do
+  alias Coffee.Tools
+  import Tools
+  use Plug
+  require Logger
+  def brew(x \\ default_value()) when is_binary(x) do
+    if ready(), do: serve()
+    unless done(), do: wait()
+    case input() do
+      _ -> inspect()
+    end
+    cond do
+      allowed() -> choose()
+    end
+    with y <- fetch(), do: finish(y)
+    for y <- items(), do: map(y)
+    receive do
+      _ -> handle()
+    end
+    try do
+      attempt()
+    after
+      cleanup()
+    end
+    x |> prepare |> Tools.remote |> pour() |> Tools.finish()
+    x |> (not_a_call)
+    x |> :not_a_call
+  end
+  defp private_head(), do: private_body()
+  defmacro macro_head(x), do: x
+  defmacrop private_macro_head(x), do: x
+  defguard guard_head(x) when is_atom(x)
+  defguardp private_guard_head(x) when is_list(x)
+  defdelegate delegated_head(x), to: Tools
+end
+ defprotocol Brewable do
+   def protocol_head(x)
+ end
+ defimpl Brewable, for: Cup do
+   def protocol_head(x), do: implemented(x)
+ end"#,
+        &[
+            ("is_binary(x)", "is_binary", None, true, "CALLS"),
+            ("ready()", "ready", None, true, "CALLS"),
+            ("serve()", "serve", None, true, "CALLS"),
+            ("done()", "done", None, true, "CALLS"),
+            ("wait()", "wait", None, true, "CALLS"),
+            ("input()", "input", None, true, "CALLS"),
+            ("inspect()", "inspect", None, true, "CALLS"),
+            ("allowed()", "allowed", None, true, "CALLS"),
+            ("choose()", "choose", None, true, "CALLS"),
+            ("fetch()", "fetch", None, true, "CALLS"),
+            ("finish(y)", "finish", None, true, "CALLS"),
+            ("items()", "items", None, true, "CALLS"),
+            ("map(y)", "map", None, true, "CALLS"),
+            ("handle()", "handle", None, true, "CALLS"),
+            ("attempt()", "attempt", None, true, "CALLS"),
+            ("cleanup()", "cleanup", None, true, "CALLS"),
+            ("prepare", "prepare", None, true, "CALLS"),
+            ("Tools.remote", "remote", Some("Tools"), false, "CALLS"),
+            ("pour()", "pour", None, true, "CALLS"),
+            ("Tools.finish()", "finish", Some("Tools"), false, "CALLS"),
+            ("private_body()", "private_body", None, true, "CALLS"),
+            ("is_atom(x)", "is_atom", None, true, "CALLS"),
+            ("is_list(x)", "is_list", None, true, "CALLS"),
+            ("implemented(x)", "implemented", None, true, "CALLS"),
+        ],
+    )
+}
+
 fn first_error_full_walk(root: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
     let mut pending = vec![root];
     while let Some(node) = pending.pop() {

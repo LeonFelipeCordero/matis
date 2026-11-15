@@ -35,6 +35,7 @@ const NAME_NODES: &[&str] = &[
 
 #[derive(Clone, Copy)]
 pub struct InheritancePolicy {
+    pub query: Option<&'static str>,
     pub clauses: &'static [&'static str],
     pub complete_header: bool,
     pub superclass_field: Option<&'static str>,
@@ -46,6 +47,7 @@ impl Default for InheritancePolicy {
     /// Do not complete headers or enable Kotlin-specific base-name handling.
     fn default() -> Self {
         Self {
+            query: None,
             clauses: &[
                 "superclass",
                 "super_interfaces",
@@ -66,7 +68,14 @@ impl Default for InheritancePolicy {
 impl InheritancePolicy {
     /// Create a policy for `clauses` with all optional extraction behavior disabled.
     pub const fn new(clauses: &'static [&'static str]) -> Self {
-        Self { clauses, complete_header: false, superclass_field: None, heritage_clause: None, kotlin_base: false }
+        Self {
+            query: None,
+            clauses,
+            complete_header: false,
+            superclass_field: None,
+            heritage_clause: None,
+            kotlin_base: false,
+        }
     }
 }
 
@@ -135,8 +144,26 @@ fn clause_names(node: Node<'_>, source: &[u8], policy: InheritancePolicy) -> Vec
     named_children(node).into_iter().flat_map(|child| clause_names(child, source, policy)).collect()
 }
 
+fn is_clause(node: Node<'_>, policy: InheritancePolicy) -> bool {
+    policy.clauses.contains(&node.kind())
+        || (Some(node.kind()) == policy.heritage_clause
+            && !named_children(node).iter().any(|child| policy.clauses.contains(&child.kind())))
+}
+
+fn header_candidate(node: Node<'_>, policy: InheritancePolicy) -> bool {
+    !std::iter::successors(node.parent(), |parent| parent.parent())
+        .any(|parent| BODY_NODES.contains(&parent.kind()) || is_clause(parent, policy))
+}
+
 fn header_names(root: Node<'_>, source: &[u8], policy: InheritancePolicy) -> Vec<String> {
-    let mut pending = vec![root];
+    let mut pending = match policy.query {
+        Some(query) => super::queries::selected_nodes((root, source), query, "inheritance")
+            .into_iter()
+            .filter(|node| header_candidate(*node, policy))
+            .rev()
+            .collect(),
+        None => vec![root],
+    };
     let mut names = vec![];
     while let Some(node) = pending.pop() {
         if BODY_NODES.contains(&node.kind()) {
@@ -150,12 +177,13 @@ fn header_names(root: Node<'_>, source: &[u8], policy: InheritancePolicy) -> Vec
                     .filter(|s| !s.is_empty()),
             );
         }
-        let has_clause = named_children(node).iter().any(|c| policy.clauses.contains(&c.kind()));
-        if policy.clauses.contains(&node.kind()) || (Some(node.kind()) == policy.heritage_clause && !has_clause) {
+        if is_clause(node, policy) {
             names.extend(clause_names(node, source, policy));
             continue;
         }
-        pending.extend(named_children(node).into_iter().rev());
+        if policy.query.is_none() {
+            pending.extend(named_children(node).into_iter().rev());
+        }
     }
     names
 }

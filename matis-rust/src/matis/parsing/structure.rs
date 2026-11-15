@@ -226,18 +226,37 @@ fn merge_item(mut native: StructureItem, tagged: &StructureItem) -> StructureIte
     native
 }
 
+fn reconcile_kotlin((node, item): (Node<'_>, &mut StructureItem), tagged: &StructureItem) {
+    match node.kind() {
+        "function_declaration" => item.name = tagged.name.clone().or(item.name.take()),
+        "class_declaration" if tagged.kind == StructureKind::Interface => item.kind = StructureKind::Interface,
+        _ => {}
+    }
+}
+
 #[derive(Default)]
 struct DeclarationSet<'a> {
     entries: Vec<Declaration<'a>>,
     positions: HashMap<DeclarationKey, usize>,
+    query_positions: HashMap<usize, usize>,
 }
 impl<'a> DeclarationSet<'a> {
-    fn insert(&mut self, (node, item): Declaration<'a>, adapter: LanguageAdapter<'_>, native: bool) {
+    fn insert(&mut self, (node, mut item): Declaration<'a>, adapter: LanguageAdapter<'_>, native: bool) {
+        if native
+            && adapter.language == "kotlin"
+            && let Some(index) = self.query_positions.get(&node.id())
+        {
+            // Preserve Kotlin's former canonical names/kinds even when native identity differs.
+            reconcile_kotlin((node, &mut item), &self.entries[*index].1);
+        }
         let key = declaration_key(node, &item, adapter);
         if let Some(index) = self.positions.get(&key).copied() {
             let item = if native { merge_item(item, &self.entries[index].1) } else { item };
             self.entries[index] = (node, item);
         } else {
+            if !native {
+                self.query_positions.insert(node.id(), self.entries.len());
+            }
             self.positions.insert(key, self.entries.len());
             self.entries.push((node, item));
         }

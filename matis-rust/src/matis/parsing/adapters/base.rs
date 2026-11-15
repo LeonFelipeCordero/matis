@@ -1,9 +1,9 @@
 use super::{elixir, go, java, javascript, kotlin, python, rust, typescript};
 use crate::parsing::{
     discovery::require_supported_language,
+    queries,
     syntax::{self, CallSite, CallTarget, CallVisitor, DeclarationCarrier, DeclarationHeader, InheritancePolicy},
 };
-use crate::syntax::walk;
 use anyhow::Result;
 use tree_sitter::Node;
 
@@ -69,21 +69,13 @@ impl LanguageAdapter<'_> {
     /// Rust synthetic macro sites include byte shifts and matching synthetic source bytes.
     pub fn visit_calls(self, root: Node<'_>, source: &[u8], visitor: &mut CallVisitor<'_>) {
         match self.language {
-            "javascript" | "jsx" | "typescript" | "tsx" => javascript::visit_calls(root, source, visitor),
             "elixir" => elixir::visit_calls(root, source, visitor),
             "rust" => rust::visit_calls(root, source, visitor),
             _ => self.visit_standard_calls(root, source, visitor),
         }
     }
     fn visit_standard_calls(self, root: Node<'_>, source: &[u8], visitor: &mut CallVisitor<'_>) {
-        let types = match self.language {
-            "python" => &["call"][..],
-            "go" => &["call_expression"][..],
-            "java" => &["method_invocation", "object_creation_expression", "method_reference"][..],
-            "kotlin" => &["call_expression", "callable_reference"][..],
-            _ => syntax::FALLBACK_CALL_TYPES,
-        };
-        for node in walk(root).filter(|node| types.contains(&node.kind())) {
+        for node in queries::selected_nodes((root, source), queries::calls(self.language), "site") {
             visitor(CallSite::new(node), source);
         }
     }
@@ -115,22 +107,17 @@ impl LanguageAdapter<'_> {
             "rust" => &["pub"],
             _ => &["public", "private", "protected", "internal", "pub"],
         };
-        syntax::modifier_metadata(node, source, words)
+        syntax::modifier_metadata((node, source), words, queries::metadata(self.language))
     }
     /// Supplement native imports with Kotlin import headers or Rust external module declarations.
     /// Use matching root/source bytes and one-based lines; deduplicate additions and sort by line.
     /// Return `native` unchanged for languages without supplemental import nodes.
     pub fn imports(self, root: Node<'_>, source: &[u8], native: Vec<(String, usize)>) -> Vec<(String, usize)> {
-        let node_type = match self.language {
-            "kotlin" => Some("import_header"),
-            "rust" => Some("mod_item"),
-            _ => None,
+        let Some(query) = queries::imports(self.language) else {
+            return native;
         };
-        let policy = syntax::ImportPolicy {
-            node_type,
-            accept: |node| node.kind() != "mod_item" || node.child_by_field_name("body").is_none(),
-        };
-        syntax::supplement_imports((root, source), native, policy)
+        let nodes = queries::selected_nodes((root, source), query, "import");
+        syntax::supplement_imports(nodes, source, native)
     }
     /// Extract syntactic base names under this language's policy; parser failures yield an empty list.
     pub fn inheritance(self, header: DeclarationHeader<'_>) -> Vec<String> {
@@ -158,6 +145,7 @@ impl LanguageAdapter<'_> {
             "go" | "rust" | "elixir" => {}
             _ => policy = InheritancePolicy::default(),
         }
+        policy.query = queries::inheritance(self.language);
         policy
     }
 }
