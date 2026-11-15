@@ -4,7 +4,6 @@ use crate::parsing::syntax::{
 use crate::syntax::{field, named_children, text, walk};
 use tree_sitter::Node;
 pub const CALLBACK_TYPES: &[&str] = &["arrow_function", "function_expression", "generator_function"];
-pub const QUERY: &str = "\n[(arrow_function) (function_expression) (generator_function)] @definition.function\n";
 
 /// Test whether the node names an opening or self-closing JSX tag, including native tags.
 pub fn is_jsx_site(node: Node<'_>) -> bool {

@@ -3,7 +3,6 @@ use crate::{
     syntax::{named_children, text},
 };
 use tree_sitter::Node;
-pub const QUERY: &str = "\n(lambda) @definition.function\n";
 pub const CALLBACK_TYPES: &[&str] = &["lambda"];
 
 /// Unwrap decorated definitions and retain their decorator text on the declaration carrier.

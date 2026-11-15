@@ -12,3 +12,5 @@
       (attribute
         attribute: (identifier) @name)
   ]) @reference.call
+
+(lambda) @definition.function

@@ -97,3 +97,5 @@
  (binary_expression)
  (call_expression)
 ]))) @definition.constant
+
+[(arrow_function) (function_expression) (generator_function)] @definition.function

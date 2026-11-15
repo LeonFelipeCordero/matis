@@ -47,3 +47,7 @@
   (delegation_specifier
     (user_type
       (type_identifier) @name))) @reference.implementation
+
+(package_header (identifier) @name) @definition.module
+(companion_object) @definition.class
+[(lambda_literal) (anonymous_function)] @definition.function

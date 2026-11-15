@@ -1,7 +1,7 @@
-//! Merge native metadata and bundled tags on canonical syntax-tree carriers.
+//! Merge native metadata and declaration queries on canonical syntax-tree carriers.
 use super::{
     adapters::{LanguageAdapter, get_adapter},
-    queries::tags_query,
+    queries::declarations,
     syntax::{DeclarationCarrier, ParsedSyntax},
 };
 use crate::syntax::text;
@@ -49,8 +49,8 @@ fn structure_kind(kind: &str) -> StructureKind {
         .unwrap_or_else(|| StructureKind::Other(kind.to_owned()))
 }
 
-/// Return the cached query combining bundled tags and adapter declaration captures.
-/// Cache successful lookups, including `None` when neither source provides query text.
+/// Return the cached declaration query for the language.
+/// Cache successful lookups, including `None` when no query asset exists.
 ///
 /// # Errors
 /// Returns an error for an unsupported language, failed grammar lookup, or invalid query.
@@ -60,9 +60,9 @@ pub fn declaration_query(language: &str) -> Result<Option<Arc<Query>>> {
     if let Some(query) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(language) {
         return Ok(query.clone());
     }
-    let adapter = get_adapter(language)?;
-    let source = format!("{}{}", tags_query(language).unwrap_or_default(), adapter.declaration_query());
-    let query = if source.is_empty() { None } else { Some(Arc::new(Query::new(&get_language(language)?, &source)?)) };
+    get_adapter(language)?;
+    let grammar = get_language(language)?;
+    let query = declarations(language).map(|source| Query::new(&grammar, source).map(Arc::new)).transpose()?;
     cache.lock().unwrap_or_else(|e| e.into_inner()).insert(language.to_owned(), query.clone());
     Ok(query)
 }

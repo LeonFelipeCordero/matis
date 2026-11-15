@@ -6,7 +6,6 @@ use crate::{
     syntax::{children, field, text, walk},
 };
 use tree_sitter::Node;
-pub const QUERY: &str = "\n(anonymous_function) @definition.function\n";
 pub const CALLBACK_TYPES: &[&str] = &["anonymous_function"];
 const NONCALLS: &[&str] = &[
     "defmodule",

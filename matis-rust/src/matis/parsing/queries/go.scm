@@ -40,3 +40,5 @@
 (var_declaration (var_spec name: (identifier) @name))
 
 (const_declaration (const_spec name: (identifier) @name))
+
+(func_literal) @definition.function

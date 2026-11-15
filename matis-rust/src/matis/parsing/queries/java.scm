@@ -24,3 +24,6 @@
 
 ; Method calls
 (method_invocation name: (identifier) @name) @reference.call
+
+(lambda_expression) @definition.function
+(package_declaration (_) @name) @definition.module

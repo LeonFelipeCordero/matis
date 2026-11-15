@@ -58,3 +58,6 @@
 (impl_item
     type: (type_identifier) @name
     !trait) @reference.implementation
+
+(closure_expression) @definition.function
+(function_signature_item name: (identifier) @name) @definition.function

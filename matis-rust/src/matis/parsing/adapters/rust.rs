@@ -7,7 +7,6 @@ use crate::{
 };
 use std::collections::{HashMap, HashSet};
 use tree_sitter::Node;
-pub const QUERY: &str = "\n(closure_expression) @definition.function\n(function_signature_item name: (identifier) @name) @definition.function\n";
 pub const CALLBACK_TYPES: &[&str] = &["closure_expression"];
 const EXPRESSION_MACROS: &[&str] = &[
     "println",

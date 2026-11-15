@@ -5,7 +5,6 @@ use crate::{
     syntax::{children, named_children, text},
 };
 use tree_sitter::Node;
-pub const QUERY: &str = "\n(package_header (identifier) @name) @definition.module\n(companion_object) @definition.class\n[(lambda_literal) (anonymous_function)] @definition.function\n";
 pub const CALLBACK_TYPES: &[&str] = &["lambda_literal", "anonymous_function"];
 
 fn identifier_name(node: Node<'_>, kind: &str, source: &[u8]) -> Option<String> {

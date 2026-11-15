@@ -29,25 +29,6 @@ impl LanguageAdapter<'_> {
             "javascript" | "jsx" | "typescript" | "tsx" | "java" | "kotlin" | "go" | "rust" | "elixir" | "python"
         )
     }
-    /// Return supplemental declaration query text, or an empty string for fallback languages.
-    /// Bundled tags are added separately by structure extraction.
-    pub fn declaration_query(self) -> &'static str {
-        const QUERIES: &[(&[&str], &str)] = &[
-            (&["javascript", "jsx"], javascript::QUERY),
-            (&["typescript", "tsx"], typescript::QUERY),
-            (&["java"], java::QUERY),
-            (&["kotlin"], kotlin::QUERY),
-            (&["go"], go::QUERY),
-            (&["rust"], rust::QUERY),
-            (&["elixir"], elixir::QUERY),
-            (&["python"], python::QUERY),
-        ];
-        QUERIES
-            .iter()
-            .find(|(languages, _)| languages.contains(&self.language))
-            .map(|(_, query)| *query)
-            .unwrap_or_default()
-    }
     /// Return syntax node kinds treated as callback carriers, or an empty slice for fallback languages.
     pub fn callback_types(self) -> &'static [&'static str] {
         match self.language {

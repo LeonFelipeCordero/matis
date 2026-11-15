@@ -1,74 +1,20 @@
-//! Tags bundled with the pinned Python 1.20.0 wheel.
-//! The Rust crate of the same version has different tag assets.
-const TAGS: &[(&str, &str)] = &[
-    ("al", include_str!("queries/al.scm")),
-    ("apex", include_str!("queries/apex.scm")),
-    ("applescript", include_str!("queries/applescript.scm")),
-    ("arduino", include_str!("queries/arduino.scm")),
-    ("beancount", include_str!("queries/beancount.scm")),
-    ("cedar", include_str!("queries/cedar.scm")),
-    ("cedarschema", include_str!("queries/cedarschema.scm")),
-    ("cfml", include_str!("queries/cfml.scm")),
-    ("chatito", include_str!("queries/chatito.scm")),
-    ("commonlisp", include_str!("queries/commonlisp.scm")),
-    ("cuda", include_str!("queries/cuda.scm")),
-    ("cython", include_str!("queries/cython.scm")),
-    ("d", include_str!("queries/d.scm")),
-    ("dart", include_str!("queries/dart.scm")),
-    ("elisp", include_str!("queries/elisp.scm")),
-    ("elixir", include_str!("queries/elixir.scm")),
-    ("elm", include_str!("queries/elm.scm")),
-    ("enforce", include_str!("queries/enforce.scm")),
-    ("fortran", include_str!("queries/fortran.scm")),
-    ("fsharp", include_str!("queries/fsharp.scm")),
-    ("fsharp_signature", include_str!("queries/fsharp_signature.scm")),
-    ("gap", include_str!("queries/gap.scm")),
-    ("gdshader", include_str!("queries/gdshader.scm")),
-    ("gleam", include_str!("queries/gleam.scm")),
-    ("go", include_str!("queries/go.scm")),
-    ("gren", include_str!("queries/gren.scm")),
-    ("ispc", include_str!("queries/ispc.scm")),
-    ("java", include_str!("queries/java.scm")),
-    ("javascript", include_str!("queries/javascript.scm")),
-    ("kotlin", include_str!("queries/kotlin.scm")),
-    ("lisp", include_str!("queries/lisp.scm")),
-    ("lua", include_str!("queries/lua.scm")),
-    ("matlab", include_str!("queries/matlab.scm")),
-    ("mojo", include_str!("queries/mojo.scm")),
-    ("moonbit", include_str!("queries/moonbit.scm")),
-    ("netlinx", include_str!("queries/netlinx.scm")),
-    ("nix", include_str!("queries/nix.scm")),
-    ("ocaml", include_str!("queries/ocaml.scm")),
-    ("ocaml_interface", include_str!("queries/ocaml_interface.scm")),
-    ("picat", include_str!("queries/picat.scm")),
-    ("pony", include_str!("queries/pony.scm")),
-    ("properties", include_str!("queries/properties.scm")),
+//! Declaration queries for supported languages.
+//! Includes tags from the pinned Python 1.20.0 wheel; see queries/LICENSE.
+const QUERIES: &[(&str, &str)] = &[
     ("python", include_str!("queries/python.scm")),
-    ("ql", include_str!("queries/ql.scm")),
-    ("r", include_str!("queries/r.scm")),
-    ("racket", include_str!("queries/racket.scm")),
-    ("roc", include_str!("queries/roc.scm")),
-    ("rust", include_str!("queries/rust.scm")),
-    ("sas", include_str!("queries/sas.scm")),
-    ("scala", include_str!("queries/scala.scm")),
-    ("snakemake", include_str!("queries/snakemake.scm")),
-    ("solidity", include_str!("queries/solidity.scm")),
-    ("sourcepawn", include_str!("queries/sourcepawn.scm")),
-    ("spicedb", include_str!("queries/spicedb.scm")),
-    ("stan", include_str!("queries/stan.scm")),
-    ("svelte", include_str!("queries/svelte.scm")),
-    ("swift", include_str!("queries/swift.scm")),
-    ("sysml", include_str!("queries/sysml.scm")),
-    ("t32", include_str!("queries/t32.scm")),
-    ("tact", include_str!("queries/tact.scm")),
-    ("templ", include_str!("queries/templ.scm")),
-    ("tsx", include_str!("queries/tsx.scm")),
+    ("javascript", include_str!("queries/javascript.scm")),
+    ("jsx", include_str!("queries/jsx.scm")),
     ("typescript", include_str!("queries/typescript.scm")),
-    ("udev", include_str!("queries/udev.scm")),
+    ("tsx", include_str!("queries/tsx.scm")),
+    ("java", include_str!("queries/java.scm")),
+    ("kotlin", include_str!("queries/kotlin.scm")),
+    ("go", include_str!("queries/go.scm")),
+    ("rust", include_str!("queries/rust.scm")),
+    ("elixir", include_str!("queries/elixir.scm")),
 ];
 
-/// Return bundled tags query text for the exact language ID, or `None` if no asset exists.
+/// Return declaration query text for the exact language ID, or `None` if no asset exists.
 /// This lookup does not validate importer support or compile the query.
-pub fn tags_query(language: &str) -> Option<&'static str> {
-    TAGS.iter().find(|(name, _)| *name == language).map(|(_, query)| *query)
+pub fn declarations(language: &str) -> Option<&'static str> {
+    QUERIES.iter().find(|(name, _)| *name == language).map(|(_, query)| *query)
 }
