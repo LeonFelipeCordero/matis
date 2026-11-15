@@ -44,8 +44,7 @@ fn artifact(root: &Path) -> Value {
 }
 #[test]
 fn roundtrip_normalized_rows_and_transaction_replacement() {
-    let (temp, db, mut store) = database();
-    migrate_database(Some(&db)).unwrap();
+    let (temp, _, mut store) = database();
     let payload = artifact(temp.path());
     let saved = store.save_new("Coffee", &temp.path().to_string_lossy(), &payload).unwrap();
     assert_eq!(saved.stats.files, 1);

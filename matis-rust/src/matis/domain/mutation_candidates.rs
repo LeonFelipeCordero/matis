@@ -1,5 +1,20 @@
 //! Exact, raw-source mutation sites. Unknown input fields follow Pydantic's ignore policy.
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+/// Return the lowercase hexadecimal SHA-256 digest of the exact input bytes.
+pub fn digest(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+/// Serialize JSON with recursively sorted keys, preserved Unicode, and no extra whitespace.
+/// Use this representation for candidate and manifest identity without changing the input.
+pub fn canonical_json(value: &Value) -> String {
+    let mut sorted = value.clone();
+    sorted.sort_all_objects();
+    sorted.to_string()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

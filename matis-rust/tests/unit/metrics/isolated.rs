@@ -87,6 +87,10 @@ fn dependency_metrics_match_reverse_walk_for_every_three_node_graph() {
 
 #[test]
 fn dependency_metrics_preserve_large_components_isolates_and_diamond_merges() {
+    assert_dependency_metrics_match_walk(
+        ["a", "b", "c", "d", "isolated"].into_iter().map(String::from).collect(),
+        vec![(0, 1), (0, 2), (1, 3), (2, 3), (3, 2), (0, 0), (0, 1)],
+    );
     let mut links: Vec<_> = (0..70).map(|i| (i, (i + 1) % 70)).collect();
     links.extend((132..160).map(|i| (i, if i == 159 { 132 } else { i + 1 })));
     links.extend([(0, 130), (0, 131), (130, 132), (131, 132), (131, 132)]);

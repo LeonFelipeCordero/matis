@@ -1,5 +1,5 @@
 use super::options::{Options, UsageError, json_dump};
-use crate::{paths::absolute_path, services::repositories::analyze_folder};
+use crate::{indexer::analyze_repository, paths::absolute_path};
 use anyhow::Result;
 use serde_json::json;
 use std::path::Path;
@@ -66,7 +66,7 @@ fn standard_command(command: &str, matches: &clap::ArgMatches) -> Result<i32> {
     }
     let root = absolute_path(Path::new(options.get("--folder", ".")))?;
     let config = if command == "check" { Some(crate::metrics::config::load_config(&root)?) } else { None };
-    let artifact = analyze_folder(&root)?;
+    let artifact = analyze_repository(&root)?;
     if command == "index" {
         let graph = crate::bootstrap::repository_service(None)?.save_folder(&root, &artifact)?;
         println!(

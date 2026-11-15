@@ -9,7 +9,7 @@ use matis::{
         config::{default_config, load_config, load_project_config, validate_config, validate_project_config},
         cycles::circular_dependencies,
         dependency_metrics::dependency_metrics,
-        report::{build_artifact_report, render_markdown},
+        report::{build_artifact_report, build_report, render_markdown},
         resolver::{Connection, ResolvedGraph},
     },
 };
@@ -179,24 +179,6 @@ fn views_project_nearest_ancestors_and_preserve_node_order() {
 }
 
 #[test]
-fn dependency_metrics_deduplicate_diamonds_cycles_and_self_edges() {
-    let edges = vec![
-        edge("a", "b", "DEPENDS_ON"),
-        edge("a", "c", "DEPENDS_ON"),
-        edge("b", "d", "DEPENDS_ON"),
-        edge("c", "d", "DEPENDS_ON"),
-        edge("d", "c", "DEPENDS_ON"),
-        edge("a", "a", "DEPENDS_ON"),
-        edge("a", "b", "DEPENDS_ON"),
-    ];
-    let result = dependency_metrics(&json!({"nodes": ["a", "b", "c", "d", "isolated"], "edges": edges}));
-    assert_eq!(result["d"]["transitiveChangeImpact"], 3);
-    assert_eq!(result["c"]["transitiveChangeImpact"], 3);
-    assert_eq!(result["a"]["fanOut"], 2);
-    assert_eq!(result["isolated"], json!({"fanIn": 0, "fanOut": 0, "transitiveChangeImpact": 0, "instability": null}));
-}
-
-#[test]
 fn cycles_project_symbol_imports_and_exclude_type_only_and_symbol_self_imports() {
     let nodes =
         vec![node("file:a", "file", None), node("file:b", "file", None), node("fn", "callable", Some("file:a"))];
@@ -271,6 +253,16 @@ fn reports_recompute_dependencies_preserve_zeros_and_render_exact_markdown() {
     file["qualifiedName"] = json!("a.py");
     file["properties"]["lineCount"] = json!(0);
     let report = build_artifact_report(&json!({"nodes": [file], "edges": []})).unwrap();
+    for invalid in [Value::Null, json!({}), json!("edges")] {
+        let error = build_report(&json!({"nodes": [], "edges": invalid, "imports": []})).unwrap_err();
+        assert_eq!(error.to_string(), "edges must be an array");
+    }
+    let legacy = json!({"nodes": [], "imports": []});
+    assert_eq!(build_report(&legacy).unwrap(), build_artifact_report(&legacy).unwrap());
+    assert_eq!(
+        build_report(&json!({"nodes": [], "edges": [], "imports": []})).unwrap(),
+        build_report(&legacy).unwrap()
+    );
     assert_eq!(
         report["nodes"][0]["metrics"],
         json!({"lineCount": 0, "functionCount": 0, "measuredFunctionCount": 0, "weightedComplexitySum": 0,
