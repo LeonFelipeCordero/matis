@@ -1,3 +1,7 @@
+# Tree-sitter queries and adapters
+
+Prefer Tree-sitter queries in `.scm` files under `matis-rust/src/matis/parsing/queries/` for language extraction. Add or extend these queries before changing adapter code. Use adapter code only when `.scm` queries cannot express the required behavior, such as normalization or semantic processing. Keep query patterns in `.scm` files, not in Rust adapters.
+
 # Rust CLI testing strategy
 
 Put isolated logic tests in `matis-rust/tests/unit/`, with folders that mirror `src/matis/`. Use in-memory records and fake boundary outputs. CLI option tests must call the parser directly, not start the binary or index a project. Keep small inline Rust unit tests beside their functions.
