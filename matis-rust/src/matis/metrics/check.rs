@@ -170,7 +170,7 @@ pub fn build_check(report: &Value, config: &Value) -> Result<Value> {
         finding["helpUrl"] = config["helpLinks"][rule].as_str().map_or_else(
             || {
                 json!(format!(
-                    "https://github.com/LeonFelipeCordero/matis/blob/main/docs/check-fixes.md#{}",
+                    "https://github.com/matato-labs/matis/blob/main/docs/check-fixes.md#{}",
                     rule.to_lowercase()
                 ))
             },

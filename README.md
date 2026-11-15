@@ -5,9 +5,9 @@
 <h1 align="center">Matis</h1>
 
 <p align="center">
-  <a href="https://github.com/LeonFelipeCordero/matis/actions/workflows/rust-ci.yml"><img src="https://github.com/LeonFelipeCordero/matis/actions/workflows/rust-ci.yml/badge.svg?branch=main" alt="Rust CLI CI status"></a>
-  <a href="https://github.com/LeonFelipeCordero/matis/actions/workflows/dashboard-ci.yml"><img src="https://github.com/LeonFelipeCordero/matis/actions/workflows/dashboard-ci.yml/badge.svg?branch=main" alt="Dashboard CI status"></a>
-  <a href="https://github.com/LeonFelipeCordero/matis/actions/workflows/matis-ci.yml"><img src="https://github.com/LeonFelipeCordero/matis/actions/workflows/matis-ci.yml/badge.svg?branch=main" alt="Matis CI status"></a>
+  <a href="https://github.com/matato-labs/matis/actions/workflows/rust-ci.yml"><img src="https://github.com/matato-labs/matis/actions/workflows/rust-ci.yml/badge.svg?branch=main" alt="Rust CLI CI status"></a>
+  <a href="https://github.com/matato-labs/matis/actions/workflows/dashboard-ci.yml"><img src="https://github.com/matato-labs/matis/actions/workflows/dashboard-ci.yml/badge.svg?branch=main" alt="Dashboard CI status"></a>
+  <a href="https://github.com/matato-labs/matis/actions/workflows/matis-ci.yml"><img src="https://github.com/matato-labs/matis/actions/workflows/matis-ci.yml/badge.svg?branch=main" alt="Matis CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-89718e.svg" alt="License: MIT"></a>
 </p>
 
@@ -20,7 +20,7 @@ Rust parses files with Tree-sitter, resolves repository-local relationships, and
 Requires the stable [Rust toolchain](https://rustup.rs/). Install from this checkout:
 
 ```sh
-git clone https://github.com/LeonFelipeCordero/matis.git
+git clone https://github.com/matato-labs/matis.git
 cd matis
 cargo install --path matis-rust --locked --bins
 matis report -f /path/to/project

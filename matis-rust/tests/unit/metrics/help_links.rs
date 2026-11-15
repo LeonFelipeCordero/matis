@@ -16,7 +16,7 @@ fn every_check_rule_links_to_a_default_guide_section() {
         let rule = finding["rule"].as_str().unwrap();
         assert!(guide.contains(&format!("## {rule}\n")), "{rule}");
         let expected =
-            format!("https://github.com/LeonFelipeCordero/matis/blob/main/docs/check-fixes.md#{}", rule.to_lowercase());
+            format!("https://github.com/matato-labs/matis/blob/main/docs/check-fixes.md#{}", rule.to_lowercase());
         assert_eq!(finding["helpUrl"], expected);
         assert!(render_check(&check).contains(&format!("How to fix: <{expected}>")));
     }
@@ -33,7 +33,7 @@ fn custom_help_links_override_only_the_selected_rule() {
     let check = build_check(&report, &config).unwrap();
     assert_eq!(
         check["findings"][0]["helpUrl"],
-        "https://github.com/LeonFelipeCordero/matis/blob/main/docs/check-fixes.md#maxfunctionlines"
+        "https://github.com/matato-labs/matis/blob/main/docs/check-fixes.md#maxfunctionlines"
     );
     assert_eq!(check["findings"][1]["helpUrl"], "https://example.com/parameters#team");
     assert!(render_check(&check).contains("How to fix: <https://example.com/parameters#team>"));
