@@ -1,7 +1,7 @@
 //! Shared extraction syntax: calls, declaration carriers, imports, and metadata.
 use crate::{
     domain::models::SourceFile,
-    syntax::{children, field, named_children, text, walk},
+    syntax::{children, field, named_children, text},
 };
 use anyhow::{Result, anyhow};
 use tree_sitter::{Node, Tree};
@@ -135,8 +135,33 @@ pub fn normalize_call(site: &CallSite<'_>, source: &[u8]) -> CallTarget {
 
 /// Return optional visibility and annotation text from the node's direct modifiers.
 /// Recognize visibility modifier nodes and values in `words`, using matching `source` bytes.
-pub fn modifier_metadata(node: Node<'_>, source: &[u8], words: &[&str]) -> (Option<String>, Vec<String>) {
-    let modifiers = named_children(node).into_iter().find(|child| child.kind() == "modifiers");
+/// When supplied, `query` selects modifier groups; only the first direct group is used.
+pub fn modifier_metadata(
+    (node, source): (Node<'_>, &[u8]),
+    words: &[&str],
+    query: Option<&'static str>,
+) -> (Option<String>, Vec<String>) {
+    let modifiers = match query {
+        Some(query) => super::queries::selected_nodes((node, source), query, "metadata")
+            .into_iter()
+            .find(|child| child.parent() == Some(node)),
+        None => named_children(node).into_iter().find(|child| child.kind() == "modifiers"),
+    };
+    if let (Some(modifiers), Some(query)) = (modifiers, query) {
+        let visibility = super::queries::selected_nodes((modifiers, source), query, "visibility")
+            .into_iter()
+            .filter(|child| child.parent() == Some(modifiers))
+            .rfind(|child| {
+                child.kind() == "visibility_modifier" || words.contains(&text(Some(*child), source).as_str())
+            })
+            .map(|child| text(Some(child), source));
+        let decorators = super::queries::selected_nodes((modifiers, source), query, "annotation")
+            .into_iter()
+            .filter(|child| child.parent() == Some(modifiers))
+            .map(|child| text(Some(child), source))
+            .collect();
+        return (visibility, decorators);
+    }
     let mut visibility = None;
     let mut decorators = vec![];
     for child in modifiers.map(children).unwrap_or_default() {
@@ -154,7 +179,7 @@ pub fn modifier_metadata(node: Node<'_>, source: &[u8], words: &[&str]) -> (Opti
 /// Return explicit visibility and annotations using the shared visibility vocabulary.
 /// `source` must correspond to the node's syntax tree; no default visibility is inferred.
 pub fn metadata(node: Node<'_>, source: &[u8]) -> (Option<String>, Vec<String>) {
-    modifier_metadata(node, source, &["public", "private", "protected", "internal", "pub"])
+    modifier_metadata((node, source), &["public", "private", "protected", "internal", "pub"], None)
 }
 
 #[derive(Clone)]
@@ -215,25 +240,17 @@ pub fn callback_binding(mut node: Node<'_>, source: &[u8]) -> Option<String> {
     Some(text(Some(name.child_by_field_name("property").unwrap_or(name)), source))
 }
 
-pub struct ImportPolicy<'a> {
-    pub node_type: Option<&'a str>,
-    pub accept: fn(Node<'_>) -> bool,
-}
-
-/// Add imports accepted by `policy` from the root and its matching source bytes.
+/// Add selected import nodes using their matching source bytes.
 /// Entries contain text and one-based lines. Deduplicate additions by trimmed text and line,
-/// preserve native entries, and sort by line. Return `imports` unchanged if no node type is set.
+/// preserve native entries, and sort by line.
 pub fn supplement_imports(
-    (root, source): (Node<'_>, &[u8]),
+    nodes: Vec<Node<'_>>,
+    source: &[u8],
     mut imports: Vec<(String, usize)>,
-    policy: ImportPolicy<'_>,
 ) -> Vec<(String, usize)> {
-    let Some(node_type) = policy.node_type else {
-        return imports;
-    };
     let mut seen: std::collections::HashSet<_> =
         imports.iter().map(|(value, line)| (value.trim().to_owned(), *line)).collect();
-    for node in walk(root).filter(|node| node.kind() == node_type && (policy.accept)(*node)) {
+    for node in nodes {
         let value = text(Some(node), source).trim_end().to_owned();
         let line = node.start_position().row + 1;
         if seen.insert((value.trim().to_owned(), line)) {

@@ -1,7 +1,7 @@
-//! Merge native metadata and bundled tags on canonical syntax-tree carriers.
+//! Merge native metadata and declaration queries on canonical syntax-tree carriers.
 use super::{
     adapters::{LanguageAdapter, get_adapter},
-    queries::tags_query,
+    queries::declarations,
     syntax::{DeclarationCarrier, ParsedSyntax},
 };
 use crate::syntax::text;
@@ -49,8 +49,8 @@ fn structure_kind(kind: &str) -> StructureKind {
         .unwrap_or_else(|| StructureKind::Other(kind.to_owned()))
 }
 
-/// Return the cached query combining bundled tags and adapter declaration captures.
-/// Cache successful lookups, including `None` when neither source provides query text.
+/// Return the cached declaration query for the language.
+/// Cache successful lookups, including `None` when no query asset exists.
 ///
 /// # Errors
 /// Returns an error for an unsupported language, failed grammar lookup, or invalid query.
@@ -60,9 +60,9 @@ pub fn declaration_query(language: &str) -> Result<Option<Arc<Query>>> {
     if let Some(query) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(language) {
         return Ok(query.clone());
     }
-    let adapter = get_adapter(language)?;
-    let source = format!("{}{}", tags_query(language).unwrap_or_default(), adapter.declaration_query());
-    let query = if source.is_empty() { None } else { Some(Arc::new(Query::new(&get_language(language)?, &source)?)) };
+    get_adapter(language)?;
+    let grammar = get_language(language)?;
+    let query = declarations(language).map(|source| Query::new(&grammar, source).map(Arc::new)).transpose()?;
     cache.lock().unwrap_or_else(|e| e.into_inner()).insert(language.to_owned(), query.clone());
     Ok(query)
 }
@@ -226,18 +226,37 @@ fn merge_item(mut native: StructureItem, tagged: &StructureItem) -> StructureIte
     native
 }
 
+fn reconcile_kotlin((node, item): (Node<'_>, &mut StructureItem), tagged: &StructureItem) {
+    match node.kind() {
+        "function_declaration" => item.name = tagged.name.clone().or(item.name.take()),
+        "class_declaration" if tagged.kind == StructureKind::Interface => item.kind = StructureKind::Interface,
+        _ => {}
+    }
+}
+
 #[derive(Default)]
 struct DeclarationSet<'a> {
     entries: Vec<Declaration<'a>>,
     positions: HashMap<DeclarationKey, usize>,
+    query_positions: HashMap<usize, usize>,
 }
 impl<'a> DeclarationSet<'a> {
-    fn insert(&mut self, (node, item): Declaration<'a>, adapter: LanguageAdapter<'_>, native: bool) {
+    fn insert(&mut self, (node, mut item): Declaration<'a>, adapter: LanguageAdapter<'_>, native: bool) {
+        if native
+            && adapter.language == "kotlin"
+            && let Some(index) = self.query_positions.get(&node.id())
+        {
+            // Preserve Kotlin's former canonical names/kinds even when native identity differs.
+            reconcile_kotlin((node, &mut item), &self.entries[*index].1);
+        }
         let key = declaration_key(node, &item, adapter);
         if let Some(index) = self.positions.get(&key).copied() {
             let item = if native { merge_item(item, &self.entries[index].1) } else { item };
             self.entries[index] = (node, item);
         } else {
+            if !native {
+                self.query_positions.insert(node.id(), self.entries.len());
+            }
             self.positions.insert(key, self.entries.len());
             self.entries.push((node, item));
         }

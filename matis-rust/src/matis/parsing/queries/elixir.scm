@@ -52,3 +52,5 @@
 
 ; * modules
 (alias) @name @reference.module
+
+(anonymous_function) @definition.function

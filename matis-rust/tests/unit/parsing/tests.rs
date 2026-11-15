@@ -44,11 +44,14 @@ fn parse_files_preserves_input_order_duplicates_and_errors() -> Result<()> {
 
 #[test]
 fn script_callbacks_and_jsx_references() -> Result<()> {
-    let file = parse_file(source("tsx", "const run = ((x) => helper(x));\nconst view = <cards.CoffeeCard />;\n"))?;
-    assert!(file.symbols.iter().any(|s| s.name == "run" && s.kind == "function"));
-    let component = file.calls.iter().find(|call| call.name == "CoffeeCard").unwrap();
-    assert_eq!(component.relationship, "REFERENCES");
-    assert_eq!(component.qualifier.as_deref(), Some("cards"));
+    for language in ["javascript", "tsx"] {
+        let file =
+            parse_file(source(language, "const run = ((x) => helper(x));\nconst view = <cards.CoffeeCard />;\n"))?;
+        assert!(file.symbols.iter().any(|s| s.name == "run" && s.kind == "function"), "{language}");
+        let component = file.calls.iter().find(|call| call.name == "CoffeeCard").unwrap();
+        assert_eq!(component.relationship, "REFERENCES");
+        assert_eq!(component.qualifier.as_deref(), Some("cards"));
+    }
     Ok(())
 }
 

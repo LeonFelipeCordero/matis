@@ -1,10 +1,9 @@
 use crate::parsing::syntax::{
-    self, CallSite, CallTarget, CallVisitor, DeclarationCarrier, callback_binding, callback_carrier, named_carrier,
+    self, CallSite, CallTarget, DeclarationCarrier, callback_binding, callback_carrier, named_carrier,
 };
-use crate::syntax::{field, named_children, text, walk};
+use crate::syntax::{field, named_children, text};
 use tree_sitter::Node;
 pub const CALLBACK_TYPES: &[&str] = &["arrow_function", "function_expression", "generator_function"];
-pub const QUERY: &str = "\n[(arrow_function) (function_expression) (generator_function)] @definition.function\n";
 
 /// Test whether the node names an opening or self-closing JSX tag, including native tags.
 pub fn is_jsx_site(node: Node<'_>) -> bool {
@@ -12,27 +11,6 @@ pub fn is_jsx_site(node: Node<'_>) -> bool {
         matches!(parent.kind(), "jsx_opening_element" | "jsx_self_closing_element")
             && field(parent, &["name"]) == Some(node)
     })
-}
-
-fn component(node: Node<'_>, source: &[u8]) -> bool {
-    if node.kind() == "member_expression" {
-        return true;
-    }
-    let name = text(Some(node), source);
-    node.kind() == "identifier"
-        && !name.is_empty()
-        && !name.starts_with(|c: char| c.is_ascii_lowercase())
-        && !name.contains('-')
-}
-
-/// Invoke `visitor` for calls, constructors, and component JSX tags in depth-first source order.
-/// Exclude native JSX tags; pass each site with the supplied source bytes matching `root`.
-pub fn visit_calls(root: Node<'_>, source: &[u8], visitor: &mut CallVisitor<'_>) {
-    for node in walk(root) {
-        if matches!(node.kind(), "call_expression" | "new_expression") || is_jsx_site(node) && component(node, source) {
-            visitor(CallSite::new(node), source);
-        }
-    }
 }
 
 /// Return the optional target name, bare-name flag, and qualifier using matching source bytes.

@@ -1,6 +1,10 @@
-; Classes
+; Classes and interfaces share a grammar node.
 (class_declaration
   (type_identifier) @name) @definition.class
+
+(class_declaration
+  "interface"
+  (type_identifier) @name) @definition.interface
 
 ; Objects
 (object_declaration
@@ -47,3 +51,7 @@
   (delegation_specifier
     (user_type
       (type_identifier) @name))) @reference.implementation
+
+(package_header (identifier) @name) @definition.module
+(companion_object) @definition.class
+[(lambda_literal) (anonymous_function)] @definition.function

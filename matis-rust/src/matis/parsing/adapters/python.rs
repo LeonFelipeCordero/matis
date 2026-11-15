@@ -1,9 +1,11 @@
 use crate::{
-    parsing::syntax::{DeclarationCarrier, callback_binding, callback_carrier, named_carrier},
-    syntax::{named_children, text},
+    parsing::{
+        queries,
+        syntax::{DeclarationCarrier, callback_binding, callback_carrier, named_carrier},
+    },
+    syntax::text,
 };
 use tree_sitter::Node;
-pub const QUERY: &str = "\n(lambda) @definition.function\n";
 pub const CALLBACK_TYPES: &[&str] = &["lambda"];
 
 /// Unwrap decorated definitions and retain their decorator text on the declaration carrier.
@@ -19,11 +21,15 @@ pub fn declaration<'tree>(node: Node<'tree>, source: &[u8]) -> DeclarationCarrie
     }
     let mut carrier = named_carrier(node, source);
     if let Some(parent) = node.parent().filter(|p| p.kind() == "decorated_definition") {
-        carrier.decorators = named_children(parent)
-            .into_iter()
-            .filter(|c| c.kind() == "decorator")
-            .map(|c| text(Some(c), source))
-            .collect();
+        carrier.decorators = queries::selected_nodes(
+            (parent, source),
+            queries::metadata("python").expect("Python metadata query is bundled"),
+            "metadata",
+        )
+        .into_iter()
+        .filter(|c| c.parent() == Some(parent))
+        .map(|c| text(Some(c), source))
+        .collect();
     }
     carrier
 }

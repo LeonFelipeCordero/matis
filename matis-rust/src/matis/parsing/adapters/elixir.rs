@@ -1,31 +1,13 @@
 use crate::{
     language_syntax::{DECLARATIONS, declaration_head},
+    parsing::queries,
     parsing::syntax::{
         self, CallSite, CallTarget, CallVisitor, DeclarationCarrier, callback_binding, callback_carrier, named_carrier,
     },
-    syntax::{children, field, text, walk},
+    syntax::{field, text},
 };
 use tree_sitter::Node;
-pub const QUERY: &str = "\n(anonymous_function) @definition.function\n";
 pub const CALLBACK_TYPES: &[&str] = &["anonymous_function"];
-const NONCALLS: &[&str] = &[
-    "defmodule",
-    "defprotocol",
-    "defimpl",
-    "alias",
-    "import",
-    "use",
-    "require",
-    "if",
-    "unless",
-    "case",
-    "cond",
-    "with",
-    "for",
-    "receive",
-    "try",
-];
-
 /// Mark anonymous functions as callbacks with supported bindings; keep other declaration names.
 /// `source` must correspond to the node's syntax tree.
 pub fn declaration<'tree>(node: Node<'tree>, source: &[u8]) -> DeclarationCarrier<'tree> {
@@ -42,10 +24,6 @@ fn target(node: Node<'_>, source: &[u8]) -> String {
 }
 
 fn noncall(node: Node<'_>, source: &[u8]) -> bool {
-    let name = target(node, source);
-    if NONCALLS.contains(&name.as_str()) || DECLARATIONS.contains(&name.as_str()) {
-        return true;
-    }
     let mut parent = node.parent();
     while let Some(owner) = parent {
         if DECLARATIONS.contains(&target(owner, source).as_str()) {
@@ -55,14 +33,6 @@ fn noncall(node: Node<'_>, source: &[u8]) -> bool {
         parent = owner.parent();
     }
     false
-}
-
-fn pipeline_target(node: Node<'_>) -> bool {
-    node.parent().is_some_and(|parent| {
-        parent.kind() == "binary_operator"
-            && field(parent, &["right"]) == Some(node)
-            && children(parent).iter().any(|c| c.kind() == "|>")
-    })
 }
 
 /// Return the optional target name, bare-name flag, and qualifier from matching source bytes.
@@ -78,14 +48,8 @@ pub fn normalize_call(site: &CallSite<'_>, source: &[u8]) -> CallTarget {
 /// Invoke `visitor` for calls and pipeline right-side identifiers in depth-first source order.
 /// Exclude special forms and declaration heads; `source` must match the root's syntax tree.
 pub fn visit_calls(root: Node<'_>, source: &[u8], visitor: &mut CallVisitor<'_>) {
-    for node in walk(root) {
-        if node.kind() == "identifier" {
-            if pipeline_target(node) {
-                visitor(CallSite::new(node), source);
-            }
-            continue;
-        }
-        if matches!(node.kind(), "call" | "remote_call") && !noncall(node, source) {
+    for node in queries::selected_nodes((root, source), queries::calls("elixir"), "site") {
+        if node.kind() == "identifier" || !noncall(node, source) {
             visitor(CallSite::new(node), source);
         }
     }

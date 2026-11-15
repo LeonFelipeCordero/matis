@@ -95,6 +95,125 @@ fn rust_external_modules_and_opaque_shadowed_targets() -> Result<()> {
 }
 
 #[test]
+fn python_decorators_keep_exact_text_names_and_definition_boundaries() -> Result<()> {
+    let file = parse(
+        "python",
+        "@trace(\"café\")\n@pkg.decorator(\n    flag=True,\n)\nclass Outer(pkg.Base[T], Other, metaclass=Meta):\n    @staticmethod\n    @audit\n    def run():\n        @inner\n        def nested(): pass\n",
+    )?;
+    let outer = file.symbols.iter().find(|symbol| symbol.name == "Outer").unwrap();
+    assert_eq!(outer.decorators, ["@trace(\"café\")", "@pkg.decorator(\n    flag=True,\n)"]);
+    let run = file.symbols.iter().find(|symbol| symbol.name == "run").unwrap();
+    assert_eq!(run.decorators, ["@staticmethod", "@audit"]);
+    let nested = file.symbols.iter().find(|symbol| symbol.name == "nested").unwrap();
+    assert_eq!(nested.decorators, ["@inner"]);
+    assert_eq!(
+        file.inheritances.iter().map(|base| base.target_name.as_str()).collect::<Vec<_>>(),
+        ["pkg.Base", "Other"]
+    );
+    Ok(())
+}
+
+#[test]
+fn modifier_metadata_does_not_include_nested_declarations() -> Result<()> {
+    use crate::parsing::{
+        adapters::get_adapter,
+        queries,
+        syntax::{modifier_metadata, parse},
+    };
+    for (language, source, visibility, annotation) in [
+        (
+            "java",
+            "@Trace(value = 1) public class Outer { @Inner private void hidden() {} }",
+            "public",
+            "@Trace(value = 1)",
+        ),
+        ("java", "@Trace(@Nested) private public class Outer {}", "public", "@Trace(@Nested)"),
+        (
+            "kotlin",
+            "@Trace(\"café\")\ninternal class Outer {\n @Inner\n private fun hidden() {}\n}\n",
+            "internal",
+            "@Trace(\"café\")",
+        ),
+        ("kotlin", "@Trace\nprivate internal class Outer {}\n", "internal", "@Trace"),
+    ] {
+        let tree = parse(language, source.as_bytes())?;
+        let node = crate::syntax::walk(tree.root_node()).find(|node| node.kind() == "class_declaration").unwrap();
+        let expected = (Some(visibility.to_owned()), vec![annotation.to_owned()]);
+        assert_eq!(
+            modifier_metadata((node, source.as_bytes()), &["public", "private", "protected", "internal"], None),
+            expected,
+        );
+        assert_eq!(
+            modifier_metadata((node, source.as_bytes()), &[], queries::metadata(language)),
+            ((language == "kotlin").then(|| visibility.to_owned()), vec![annotation.to_owned()]),
+        );
+        assert_eq!(
+            get_adapter(language)?.metadata(node, source.as_bytes()),
+            expected,
+            "{language}: {}",
+            tree.root_node().to_sexp()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn inheritance_queries_preserve_header_policies_and_reparsing() -> Result<()> {
+    use crate::parsing::{
+        adapters::get_adapter,
+        syntax::{DeclarationHeader, inheritance_names},
+    };
+    for (language, kind, signature, expected) in [
+        ("python", "class", "class Child(pkg.Base[T], Other, metaclass=Meta):", vec!["pkg.Base", "Other"]),
+        ("javascript", "class", "class Child extends ns.Base", vec!["ns.Base"]),
+        ("jsx", "class", "class Child extends ns.Base {}", vec![]),
+        (
+            "typescript",
+            "class",
+            "class Child<T> extends ns.Base<T> implements Reader<T>, Writer",
+            vec!["ns.Base", "Reader", "Writer"],
+        ),
+        ("tsx", "interface", "interface Child<T> extends ns.Reader<T>, Writer", vec!["ns.Reader", "Writer"]),
+        (
+            "java",
+            "class",
+            "class Child<T> extends pkg.Base<T> implements Reader<T>, Writer",
+            vec!["pkg.Base", "Reader", "Writer"],
+        ),
+        ("java", "interface", "interface Child<T> extends Reader<T>, pkg.Writer", vec!["Reader", "pkg.Writer"]),
+        ("kotlin", "class", "class Child<T> : pkg.Base<T>(), Reader<T>", vec!["pkg.Base", "Reader"]),
+        (
+            "typescript",
+            "class",
+            "class Outer extends Root { method() { class Inner extends Hidden {} } }",
+            vec!["Root"],
+        ),
+        ("python", "class", "class Outer(Root):\n class Inner(Hidden): pass", vec!["Root"]),
+    ] {
+        let adapter = get_adapter(language)?;
+        let header = || DeclarationHeader { language, kind, signature };
+        assert_eq!(adapter.inheritance(header()), expected, "{language}: {signature}");
+        let mut legacy = adapter.inheritance_policy();
+        legacy.query = None;
+        assert_eq!(inheritance_names(header(), legacy), expected, "legacy {language}: {signature}");
+    }
+    Ok(())
+}
+
+#[test]
+fn supplemental_imports_keep_native_text_and_deduplicate_by_line() -> Result<()> {
+    use crate::parsing::{adapters::get_adapter, syntax::parse};
+    let source = b"\nmod child;\nmod child;\nmod inline {}\n";
+    let tree = parse("rust", source)?;
+    let native = vec![("native".to_owned(), 9), (" mod child; ".to_owned(), 2)];
+    assert_eq!(
+        get_adapter("rust")?.imports(tree.root_node(), source, native),
+        [(" mod child; ".to_owned(), 2), ("mod child;".to_owned(), 3), ("native".to_owned(), 9)]
+    );
+    Ok(())
+}
+
+#[test]
 fn unsupported_grammars_are_rejected() {
     for language in ["lua", "json", "csv", "c", "cpp", "csharp", "php", "ruby"] {
         assert!(parse(language, "").is_err(), "{language}");

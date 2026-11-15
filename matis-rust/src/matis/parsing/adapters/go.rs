@@ -3,7 +3,6 @@ use crate::{
     syntax::{named_children, text},
 };
 use tree_sitter::Node;
-pub const QUERY: &str = "\n(func_literal) @definition.function\n";
 pub const CALLBACK_TYPES: &[&str] = &["func_literal"];
 
 fn binding(node: Node<'_>, source: &[u8]) -> Option<String> {

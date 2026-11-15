@@ -1,7 +1,5 @@
 use crate::parsing::syntax::{DeclarationCarrier, callback_binding, callback_carrier, named_carrier};
 use tree_sitter::Node;
-pub const QUERY: &str =
-    "\n(lambda_expression) @definition.function\n(package_declaration (_) @name) @definition.module\n";
 pub const CALLBACK_TYPES: &[&str] = &["lambda_expression"];
 
 /// Mark constructors with an unset carrier name and normalize lambda callbacks with supported bindings.
