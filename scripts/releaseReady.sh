@@ -5,6 +5,7 @@ set -euo pipefail
 : "${CI_RELEASE_SHA:?}"
 [[ $# -gt 0 ]]
 
+# Leon's user ID stays the release authority after repository transfers.
 gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs" \
   -f head_sha="$CI_RELEASE_SHA" -f event=push -f per_page=100 \
   --paginate --jq '.workflow_runs' |
@@ -15,8 +16,8 @@ gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs" \
       [$runs[] | select(.path == $path and .head_sha == $sha and
         .head_branch == "main" and .event == "push" and
         .head_repository.full_name == $repo and
-        .actor.login == ($repo | split("/")[0]) and
-        .triggering_actor.login == ($repo | split("/")[0]))] |
+        .actor.id == 10437261 and
+        .triggering_actor.id == 10437261)] |
       max_by([.run_number, .run_attempt]) |
       .status == "completed" and .conclusion == "success")
   ' "$@"

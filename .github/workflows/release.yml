@@ -15,11 +15,11 @@ concurrency:
 
 jobs:
   checks:
+    # Repository IDs survive transfers; only Leon's account can authorize releases.
     if: >-
-      github.repository == 'LeonFelipeCordero/matis' &&
-      github.event.workflow_run.actor.login == github.repository_owner &&
-      github.event.workflow_run.actor.id == github.repository_owner_id &&
-      github.event.workflow_run.triggering_actor.login == github.repository_owner &&
+      github.repository_id == '1410694784' &&
+      github.event.workflow_run.actor.id == 10437261 &&
+      github.event.workflow_run.triggering_actor.id == 10437261 &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&

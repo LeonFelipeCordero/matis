@@ -8,22 +8,22 @@ import unittest
 SCRIPT = Path(__file__).resolve().with_name("releaseReady.sh")
 PATHS = [".github/workflows/first.yml", ".github/workflows/second.yml"]
 SHA = "a" * 40
-REPOSITORY = "LeonFelipeCordero/example"
+REPOSITORY = "matato-labs/example"
 
 
 def run(path, **changes):
     return {
         "path": path, "head_sha": SHA, "head_branch": "main", "event": "push",
         "head_repository": {"full_name": REPOSITORY},
-        "actor": {"login": "LeonFelipeCordero"},
-        "triggering_actor": {"login": "LeonFelipeCordero"},
+        "actor": {"login": "LeonFelipeCordero", "id": 10437261},
+        "triggering_actor": {"login": "LeonFelipeCordero", "id": 10437261},
         "run_number": 1, "run_attempt": 1, "status": "completed",
         "conclusion": "success", **changes,
     }
 
 
 class ReleaseReadyTest(unittest.TestCase):
-    def ready(self, runs):
+    def ready(self, runs, repository=REPOSITORY):
         with tempfile.TemporaryDirectory() as directory:
             gh = Path(directory) / "gh"
             gh.write_text("#!/bin/sh\nprintf '%s\\n' \"$MOCK_RUNS\"\n")
@@ -31,14 +31,18 @@ class ReleaseReadyTest(unittest.TestCase):
             result = subprocess.run(
                 ["bash", str(SCRIPT), *PATHS], text=True, capture_output=True,
                 env={**os.environ, "PATH": directory + ":" + os.environ["PATH"],
-                     "GITHUB_REPOSITORY": REPOSITORY, "CI_RELEASE_SHA": SHA,
+                     "GITHUB_REPOSITORY": repository, "CI_RELEASE_SHA": SHA,
                      "MOCK_RUNS": json.dumps(runs)},
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout.strip() == "true"
 
-    def test_all_required_workflows_pass(self):
-        self.assertTrue(self.ready([run(path) for path in PATHS]))
+    def test_all_required_workflows_pass_before_and_after_transfer(self):
+        for repository in ["LeonFelipeCordero/example", REPOSITORY]:
+            with self.subTest(repository=repository):
+                self.assertTrue(self.ready([
+                    run(path, head_repository={"full_name": repository}) for path in PATHS
+                ], repository=repository))
 
     def test_missing_workflow_blocks_release(self):
         self.assertFalse(self.ready([run(PATHS[0])]))
@@ -68,6 +72,10 @@ class ReleaseReadyTest(unittest.TestCase):
             {"head_repository": {"full_name": "attacker/example"}},
             {"actor": {"login": "dependabot[bot]"}},
             {"triggering_actor": {"login": "attacker"}},
+            {"actor": {"login": "LeonFelipeCordero", "id": 999}},
+            {"triggering_actor": {"login": "LeonFelipeCordero", "id": 999}},
+            {"actor": {"login": "matato-labs", "id": 999}},
+            {"triggering_actor": {"login": "matato-labs", "id": 999}},
         ]:
             with self.subTest(change=change):
                 self.assertFalse(self.ready([run(PATHS[0]), run(PATHS[1], **change)]))
