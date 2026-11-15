@@ -10,6 +10,7 @@ Usage: bash scripts/release.sh
 
 Detect native Ubuntu/Arch, check gh authentication, fetch origin tags, select
 and validate the version, build one native package, then publish it.
+An exact-HEAD published release is skipped; an exact-HEAD draft is resumed.
 Optional debugging commands:
        bash scripts/release.sh version
        bash scripts/release.sh status <version>
@@ -143,12 +144,17 @@ publish() {
 }
 
 main() {
-  local platform version
+  local platform version state
   platform=$(detect_platform)
   gh auth status
   git fetch origin --tags
-  version=$(python3 scripts/releaseVersion.py)
+  version=$(python3 scripts/releaseVersion.py release)
   validate_version "$version"
+  state=$(release_state "$version")
+  if [[ $state == published ]]; then
+    echo "v$version is already published at HEAD; skipping"
+    return
+  fi
   build "$platform" "$version"
   publish "$version" "$platform"
 }
