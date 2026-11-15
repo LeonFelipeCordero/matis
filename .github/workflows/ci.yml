@@ -1,0 +1,107 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matis:
+    name: matis
+    runs-on: [self-hosted, linux, x64, matato-local]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: matis-rust
+      - run: cargo build --manifest-path matis-rust/Cargo.toml --release --locked --bins
+      - run: echo "$GITHUB_WORKSPACE/matis-rust/target/release" >> "$GITHUB_PATH"
+      - name: Analyze and check the project
+        shell: bash
+        run: |
+          set -euo pipefail
+          matis report -f .
+          matis check --folder . --format json | tee "$RUNNER_TEMP/matisReport.json"
+          jq -e '.findings == []' "$RUNNER_TEMP/matisReport.json"
+
+  test:
+    name: Test
+    runs-on: [self-hosted, linux, x64, matato-local]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: matis-rust
+      - run: cargo test --manifest-path matis-rust/Cargo.toml --locked --all-targets
+      - run: cargo build --manifest-path matis-rust/Cargo.toml --release --locked --bins
+
+  checks:
+    name: Checks
+    runs-on: [self-hosted, linux, x64, matato-local]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: matis-rust
+      - run: cargo fmt --manifest-path matis-rust/Cargo.toml --check
+      - run: cargo clippy --manifest-path matis-rust/Cargo.toml --locked --all-targets -- -D warnings
+
+  dashboard:
+    name: Dashboard
+    runs-on: [self-hosted, linux, x64, matato-local]
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            matis-rust
+            dashboard/tests/rust-fixture
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.1"
+      - run: bun install --no-save
+      - run: bun run build
+      - run: bun test
+      - run: bun run typecheck
+      - run: bun run lint
+
+  ci:
+    name: ci
+    if: always()
+    needs: [matis, test, checks, dashboard]
+    runs-on: [self-hosted, linux, x64, matato-local]
+    steps:
+      - name: Require all checks to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: jq --exit-status 'all(.[]; .result == "success")' <<< "$RESULTS"

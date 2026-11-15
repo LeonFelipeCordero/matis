@@ -49,6 +49,14 @@ def main():
     base = tomllib.loads(manifest.read_text())["package"]["version"]
     tags = subprocess.check_output(["git", "tag", "--list"], text=True).splitlines()
     current = subprocess.check_output(["git", "tag", "--points-at", "HEAD"], text=True).splitlines()
+    if sys.argv[1:] == ["release"]:
+        commit = subprocess.check_output(["git", "rev-parse", "--verify", "HEAD"], text=True).strip()
+        drafts = subprocess.check_output([
+            "gh", "api", "--paginate", "repos/{owner}/{repo}/releases", "--jq",
+            f'.[] | select(.draft == true and .target_commitish == "{commit}") | .tag_name',
+        ], text=True).splitlines()
+        tags.extend(drafts)
+        current.extend(drafts)
     print(next_version(base, tags, current))
 
 

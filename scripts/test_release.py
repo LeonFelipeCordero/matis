@@ -32,8 +32,14 @@ class ReleaseTests(unittest.TestCase):
  case "$*" in
    auth\ status) [ "${FAIL_AUTH:-0}" != 1 ] ;;
    api*)
-     if [ "${RELEASE_STATE:-missing}" != missing ]; then
-       printf '%s\t%s\n' "$RELEASE_STATE" "$SOURCE_COMMIT"
+     [ "${FAIL_API:-0}" != 1 ] || exit 1
+     if [[ "$*" == *'.tag_name' ]]; then
+       printf '%s' "${HEAD_DRAFT_TAGS:-}"
+     else
+       [ "${FAIL_STATE_API:-0}" != 1 ] || exit 1
+       if [ "${RELEASE_STATE:-missing}" != missing ]; then
+         printf '%s\t%s\n' "$RELEASE_STATE" "${RELEASE_TARGET:-$SOURCE_COMMIT}"
+       fi
      fi ;;
    release\ upload*) [ "${FAIL_UPLOAD:-0}" != 1 ] ;;
    *--json\ assets*)
@@ -49,6 +55,7 @@ class ReleaseTests(unittest.TestCase):
         self.real_git = shutil.which('git')
         self.mock('git', f'''
 if [ "$1" = ls-remote ]; then
+  [ "${{FAIL_REMOTE:-0}}" != 1 ] || exit 1
   if [ -n "${{REMOTE_COMMIT:-}}" ]; then
     printf '%s\\trefs/tags/v1.2.3\\n' "$REMOTE_COMMIT"
   fi
@@ -239,14 +246,14 @@ cp "$3/DEBIAN/control" "$FIXTURE/metadata"
 """)
         subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
                         'commit', '-qm', 'fixture'], cwd=self.root, check=True)
+        self.env['SOURCE_COMMIT'] = subprocess.check_output(
+            [self.real_git, 'rev-parse', 'HEAD'], cwd=self.root, text=True).strip()
         git_wrapper = (self.bin / 'git').read_text()
         self.mock('git', f"""
 if [ "$1" = fetch ]; then
   echo "$*" >> "$RELEASE_LOG"
   [ "${{FAIL_FETCH:-0}}" != 1 ] || exit 1
-  "{self.real_git}" tag v1.2.2
-  # A fetched stable tag must not point at HEAD.
-  "{self.real_git}" -c user.name=Test -c user.email=test@example.com commit --allow-empty -qm next
+  "{self.real_git}" tag -f v1.2.2 HEAD~1 >/dev/null
 else
 {git_wrapper}
 fi
@@ -273,15 +280,61 @@ fi
         self.assertIn('0.1.0', (self.root / 'matis-rust/Cargo.toml').read_text())
         self.assertIn('0.1.0', (self.root / 'matis-rust/Cargo.lock').read_text())
         commands = self.commands().splitlines()
-        self.assertEqual(commands[:3], ['auth status', 'fetch origin --tags', 'cargo'])
+        self.assertEqual(commands[:2], ['auth status', 'fetch origin --tags'])
+        self.assertIn(f'.draft == true and .target_commitish == "{self.env["SOURCE_COMMIT"]}"', commands[2])
+        self.assertTrue(commands[3].startswith('api '))
+        self.assertEqual(commands[4], 'cargo')
         self.assertEqual(sum(line.startswith('release upload') for line in commands), 1)
         self.assertEqual(commands[-1], 'release edit v1.2.3 --draft=false')
         self.assertFalse(any(word in self.commands() for word in ['macos', 'docker', 'podman', 'ssh']))
 
+    def test_no_arguments_skips_exact_head_published_release(self):
+        self.prepare_native_release()
+        subprocess.run([self.real_git, 'tag', 'v1.2.3'], cwd=self.root, check=True)
+        self.env.update(RELEASE_STATE='false', REMOTE_COMMIT=self.env['SOURCE_COMMIT'])
+        result = self.run_release()
+        self.assertIn('already published at HEAD; skipping', result.stdout)
+        self.assertNotIn('cargo', self.commands())
+        self.assertNotIn('release upload', self.commands())
+        self.assertNotIn('release edit', self.commands())
+        self.assertEqual(list((self.root / 'artifacts').iterdir()), [])
+
+    def test_no_arguments_resumes_exact_head_draft_without_tag(self):
+        self.prepare_native_release()
+        # A newer unrelated version must not replace the failed draft's version.
+        subprocess.run([self.real_git, 'tag', 'v9.0.0', 'HEAD~1'], cwd=self.root, check=True)
+        self.env.update(RELEASE_STATE='true', HEAD_DRAFT_TAGS='v1.2.3\n')
+        self.env['FAIL_UPLOAD'] = '1'
+        self.run_release(success=False)
+        self.assertNotIn('release edit', self.commands())
+        del self.env['FAIL_UPLOAD']
+        self.log.unlink()
+        self.run_release()
+        self.assertNotIn('release create', self.commands())
+        self.assertIn('release upload v1.2.3 ', self.commands())
+        self.assertIn('release edit v1.2.3 --draft=false', self.commands())
+        self.assertNotIn('v9.0.1', self.commands())
+
+    def test_no_arguments_rejects_non_head_release_before_build(self):
+        self.prepare_native_release()
+        for state, remote, target in [('false', 'other', 'other'),
+                                      ('true', '', 'other'),
+                                      ('true', 'other', self.env['SOURCE_COMMIT']),
+                                      ('invalid', '', self.env['SOURCE_COMMIT'])]:
+            with self.subTest(state=state, remote=remote, target=target):
+                self.log.unlink(missing_ok=True)
+                self.env.update(RELEASE_STATE=state, REMOTE_COMMIT=remote,
+                                RELEASE_TARGET=target)
+                self.run_release(success=False)
+                self.assertNotIn('cargo', self.commands())
+                self.assertNotIn('release upload', self.commands())
+
     def test_no_arguments_short_circuits_failed_boundaries(self):
         self.prepare_native_release()
         for variable, forbidden in [('FAIL_AUTH', 'fetch'), ('FAIL_FETCH', 'cargo'),
-                                    ('FAIL_BUILD', 'release'), ('FAIL_BINARY', 'release'),
+                                    ('FAIL_API', 'cargo'), ('FAIL_STATE_API', 'cargo'),
+                                    ('FAIL_REMOTE', 'cargo'),
+                                    ('FAIL_BUILD', 'release upload'), ('FAIL_BINARY', 'release upload'),
                                     ('FAIL_UPLOAD', 'release edit'),
                                     ('EXTRA_REMOTE', 'release edit')]:
             with self.subTest(variable=variable):

@@ -1,53 +1,25 @@
-name: Release
+name: release
 
 on:
   workflow_run:
-    workflows: [Rust CI, Dashboard CI, Matis CI]
+    workflows: [ci]
     types: [completed]
     branches: [main]
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
-  group: main-release
+  group: release-main
   cancel-in-progress: false
   queue: max
 
 jobs:
-  checks:
-    # Repository IDs survive transfers; only Leon's account can authorize releases.
+  release:
     if: >-
-      github.repository_id == '1410694784' &&
-      github.event.workflow_run.actor.id == 10437261 &&
-      github.event.workflow_run.triggering_actor.id == 10437261 &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
-    runs-on: [self-hosted, linux, x64, matato-local]
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      ready: ${{ steps.checks.outputs.ready }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          persist-credentials: false
-      - name: Require successful main checks for the exact commit
-        id: checks
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CI_RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          ready=$(bash scripts/releaseReady.sh .github/workflows/rust-ci.yml .github/workflows/dashboard-ci.yml .github/workflows/matis-ci.yml)
-          echo "ready=$ready" >> "$GITHUB_OUTPUT"
-
-  release:
-    name: Publish main release
-    needs: checks
-    if: needs.checks.outputs.ready == 'true'
     runs-on: [self-hosted, linux, x64, matato-local]
     timeout-minutes: 90
     permissions:
@@ -58,30 +30,15 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Select version and check exact source
-        id: version
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          version=$(bash scripts/release.sh version)
-          state=$(bash scripts/release.sh status "$version")
-          printf 'version=%s\nstate=%s\n' "$version" "$state" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
-        if: steps.version.outputs.state != 'published'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        if: steps.version.outputs.state != 'published'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.4.1'
-      - name: Build native Ubuntu package
-        if: steps.version.outputs.state != 'published'
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: bash scripts/release.sh build ubuntu "$VERSION"
-      - name: Publish or resume draft
-        if: steps.version.outputs.state != 'published'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build and publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: bash scripts/release.sh publish "$VERSION" ubuntu
+          CI: true
+        run: bash scripts/release.sh

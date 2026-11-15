@@ -1,22 +1,21 @@
 # Automatic main releases
 
-`Trusted CI` runs for owner-triggered main pushes and same-repository pull
-requests targeting main. It uses read-only contents permission and an ephemeral
-runner. Existing hosted workflows still cover other actors and forks.
+`ci` runs for main pushes and pull requests targeting main. Its independent
+Rust, dashboard, and Matis jobs run in parallel with read-only contents
+permission. The final `ci` status requires every check to succeed.
 
-After every distinct successful main push checked by
-`.github/workflows/trustedCi.yml`, `Release` checks out that exact successful
-SHA on hosted Ubuntu 24.04 and publishes a native `.deb`. This includes CI-only
-commits. PRs, forks, failed runs, and other source workflows cannot publish.
-The source actor ID, actor, and triggering actor must also match the owner;
-GitHub can report success when an unauthorized source run skips every job.
+After each successful main push checked by `.github/workflows/ci.yml`,
+`release` checks out that exact successful SHA on the local Ubuntu runner and
+calls `bash scripts/release.sh` once to publish a native `.deb`. This includes
+CI-only commits. PRs, forks, failed runs, and other source workflows cannot
+publish. Releases do not depend on the repository owner's account name.
 The release workflow must exist on the default branch before GitHub can trigger
 it. Publishing is serialized with cancellation disabled and `queue: max`, so
 new runs do not replace pending releases. GitHub allows 100 pending runs; rerun
 any release canceled because that platform queue limit was reached.
 
-The workflow fetches full history and tags, then uses the existing version
-selection, Ubuntu build, and publish commands. Each untagged HEAD gets the next
+The workflow fetches full history and tags. The single release entry point
+selects the version, checks release state, builds the package, and publishes it. Each untagged HEAD gets the next
 patch version, even when only CI changed. An already-published release skips
 successfully only when its remote tag resolves to the exact checked SHA. Drafts
 resume; mismatched tags, ambiguous draft targets, API failures, upload failures,
@@ -24,9 +23,8 @@ and asset mismatches fail without modifying a published release. A draft with
 no remote tag must target the full checked SHA. Annotated tags use their peeled
 commit. No tag is moved or force-pushed.
 
-Only the hosted release job has `contents: write`. Its token is available to
-checkout and the status/publish steps, not the package build or trusted runner
-image. Builds use the existing Rust/Bun tools and package layout. Local native
+Only the release job has `contents: write`. Its token is passed to the release
+entry point, which authenticates and calls the GitHub release API. Builds use the existing Rust/Bun tools and package layout. Local native
 Arch releases remain supported; coordinate manual publishers with automation
 because workflow concurrency does not lock local commands.
 
@@ -43,7 +41,7 @@ fetches `origin --tags`, selects and validates the version, builds one native
 package, then publishes it. Other hosts fail before authentication, fetching,
 building, or publishing. No containers, SSH, macOS builds, cross-compilation, or
 extra host configuration are used by the local command. The automatic workflow
-uses the same native Ubuntu build and publish commands on a hosted runner.
+uses the same release entry point on the local Ubuntu runner.
 
 Builds require Rust, Bun, Git, Python 3.11+, authenticated GitHub CLI with release
 write access, and the native packaging tool: `dpkg-deb` on Ubuntu or `makepkg`
