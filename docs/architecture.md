@@ -1,112 +1,114 @@
-# Architecture decision: short workflows, explicit ownership
+# Architecture: services own table repositories
 
-## Decision
+## Dependency direction
 
-Keep one Rust crate. Organize execution by capability: analysis, mutations, saved navigation, and repository management. Use plain functions for computation and existing repository ports for storage. Construct storage-backed services only in `bootstrap.rs`.
-
-Matis discovers source files, extracts facts, resolves relationships, calculates metrics, and optionally saves a normalized SQLite graph. The dashboard reads that graph directly through Bun. It does not call the Rust CLI in production. Rust owns database migrations.
-
-The analysis stages have real dependencies. Removing those dependencies or hiding them behind a pipeline framework would not make the system easier to understand. Instead, commands must run only the workflow they need.
-
-## Alternatives explored
-
-Four independent inspections covered feature modules, flatter execution, a functional core with explicit IO, and test ownership. The implementation combines the useful parts without a repository-wide move.
-
-| Option | Finding code | Making a change | Required context | Decision |
-| --- | --- | --- | --- | --- |
-| Move every layer into feature folders | Better feature locality | Large import and test churn; shared analysis still crosses features | Fewer directory jumps, same underlying dependencies | Defer broad moves; useful for a later navigation-only change |
-| Flatten workflows and remove forwarding | Clear execution entry points | Small changes at the actual owner | Mutation work no longer requires understanding graph analysis | Implement now |
-| Functional core with explicit IO | Clear calculation/storage distinction | Good for isolated rules; path resolution needs filesystem semantics | Plain inputs reduce context | Keep as a boundary rule; defer resolver and dashboard extraction |
-| Full hexagonal rewrite or separate crates | More explicit interfaces | More ports, models, composition, and compatibility work | More files to read for one operation | Reject without a concrete need |
-
-These are qualitative code-inspection findings, not measured token or performance scores.
-
-## Execution map
+Keep one Rust crate and one dashboard package. Commands, routes, and business workflows use capability services. Each table has one repository entry point. Only its owning capability service can call that repository through its domain port.
 
 ```text
-CLI
- ├─ index / report / check
- │    indexer::analyze_repository
- │      discovery → parsing → callable metrics → resolution → artifact
- │      ├─ metrics::report → metrics::check
- │      └─ RepositoryService → RepositoryProtocol → SQLite
- │
- ├─ mutations
- │    mutations::candidates::collect_candidates
- │      discovery → candidate extraction
- │      → verified manifests → optional restoring runner
- │
- ├─ mutations --saved
- │    RepositoryService::saved_folder_candidates
- │      → repository port → graph existence + ordered candidate rows
- │      → verified manifests → optional restoring runner
- │
- └─ graph
-      NavigationService → NavigationReader → read-only revision snapshot
-
-bootstrap: opens concrete stores and constructs services
-services: select/validate requests; never construct storage
-persistence: owns queries, transactions, atomic writes, and migrations
+CLI / API route
+  → operation workflow
+    → capability services
+      → owned repository ports
+        → table repositories
+          → SQLite
 ```
 
-Mutation generation no longer builds declarations, callable metrics, resolved relationships, graph artifacts, or metrics reports. Saved generation does not load unrelated nodes, edges, diagnostics, or metrics. Candidate verification still reads current sources and rejects stale or invalid sites, including when no rules are enabled.
+Services can call other services, but must not form a dependency cycle. Repositories cannot call another repository or a service. Services and workflows cannot use ORM entities, query builders, or database handles. Bootstrap code constructs repositories and injects them into their owning services; it does not perform table operations.
 
-Graph analysis still extracts candidates for persisted graphs and reports. The candidate-only workflow uses the same discovery and extraction functions, source bytes, ignore rules, ordering, and identity format.
+Rust owns schema migrations. Migration code and migration metadata are exceptions to table repository ownership. The dashboard reads the shared SQLite graph through Bun and registers repositories. It does not invoke the Rust CLI in production. Dashboard tests build the CLI and a test-only artifact helper.
 
-## Where to start
+## Ownership
 
-Paths below are under `matis-rust/src/matis/`.
+Each table below has its own repository. NodeService owns four repositories because files, symbol details, and decorators describe a node. It does not own relationships, metrics, diagnostics, or mutation candidates.
 
-| Change | Start here | Follow only when needed |
-| --- | --- | --- |
-| Command options or output | `cli/schema.rs`, the command module | Feature entry point |
-| Analysis execution | `indexer.rs` | `parsing/`, `metrics/` |
-| Mutation discovery | `mutations/candidates.rs` | `parsing/mutation_candidates.rs` |
-| Candidate identity and records | `domain/mutation_candidates.rs` | Extraction and manifest consumers |
-| Mutation replacements or safety | `mutations/rules.rs`, `mutations/manifests.rs` | `workspace.rs`, `runner.rs`, `process.rs` |
-| Saved candidates or reports | `services/repositories.rs` | `domain/repositories.rs`, `persistence/graph_queries.rs` |
-| Service construction or database selection | `bootstrap.rs` | Concrete stores |
-| Saved graph traversal | `services/navigation.rs` | Walk/source helpers and `NavigationReader` |
-| Dashboard graph behavior | `dashboard/src/lib/project-graph*.ts` | Graph components and graph store |
+| Table | Owning service | Rust service / repository module | Dashboard service / repository module |
+| --- | --- | --- | --- |
+| `repositories` | RepositoryService | `repositories` / `repositories` | `repository-service` / `repository-store` |
+| `repository_graphs` | GraphRevisionService | `graph_revisions` / `revisions` | `graph-revision-service` / `graph-revision-repository` |
+| `graph_nodes` | NodeService | `nodes` / `nodes` | `node-service` / `node-repository` |
+| `graph_files` | NodeService | `nodes` / `files` | `node-service` / `file-repository` |
+| `graph_symbols` | NodeService | `nodes` / `symbols` | `node-service` / `symbol-repository` |
+| `graph_node_decorators` | NodeService | `nodes` / `decorators` | `node-service` / `decorator-repository` |
+| `graph_edges` | RelationshipService | `relationships` / `relationships` | `relationship-service` / `relationship-repository` |
+| `graph_node_metrics` | NodeMetricsService | `node_metrics` / `metrics` | `node-metrics-service` / `node-metrics-repository` |
+| `graph_diagnostics` | DiagnosticService | `diagnostics` / `diagnostics` | `diagnostic-service` / `diagnostic-repository` |
+| `graph_mutation_candidates` | MutationCandidateService | `mutation_candidates` / `candidates` | Not accessed |
 
-Candidate identity helpers live with candidate records, below extraction and mutation execution. Parsing must not import the mutation workflow. `services/factories.rs`, `services::repositories::analyze_folder`, and `mutations::{canonical_json,digest}` remain compatibility reexports, not alternate implementations. New analysis callers use `indexer::analyze_repository` directly.
+Rust paths are under `matis-rust/src/matis/services/` and `persistence/`. Dashboard paths are under `dashboard/src/lib/services/` and `persistence/repositories/`.
+
+Repository operations are specific to their table. A repository cannot query another owner's table, including through a join. Services combine batched results inside a shared transaction. Keep parameterized queries, bounded navigation reads, stable ordering, and SQLite bind limits.
+
+## Workflows, not a GraphService
+
+There is no service that owns all graph repositories. Small workflows compose capability services for one operation.
+
+```text
+Rust bootstrap.rs
+  ├─ RepositoryWorkflow
+  │    ├─ RepositoryService
+  │    └─ SavedGraphWorkflow
+  │         → revision / node / relationship / metric / diagnostic / candidate services
+  └─ NavigationService
+       → CapabilityReader
+         → capability services on one read-only snapshot
+
+Dashboard repositories.servers.ts
+  → persistence/repositories/factory.ts (composition and connection lifetime)
+    ├─ registration / list → RepositoryService
+    └─ architecture → graphView → capability services
+                         └─ graphDetails → node / relationship / metric services
+```
+
+`RepositoryWorkflow` retains the command-facing operations for registration, indexing, saved reports, and saved mutation candidates. `SavedGraphWorkflow` coordinates replacement order, graph summaries, and report facts. These workflows do not access table ports or ORM types.
+
+`NavigationService` retains request validation, graph traversal, and source containment checks. `CapabilityReader` implements the navigation read contract using services, not database queries. The dashboard graph-view and graph-details workflows own projection and metric assembly; persistence no longer owns those business rules.
+
+Analysis stays in `indexer::analyze_repository`: discovery → parsing → callable metrics → relationship resolution → artifact. Pure calculations do not need repository ports. Fresh mutation discovery stays independent of graph analysis. Saved mutation discovery reads revision existence and candidate rows without loading unrelated graph facts.
+
+## Transactions and snapshots
+
+Rust's private persistence `Session` is shared by the repositories built in `bootstrap.rs`. The domain `UnitOfWork` opens a scope. A successful workflow commits it; dropping an unfinished scope rolls it back. Services do not commit independently and business callers never receive a connection.
+
+Registration plus its initial graph save is atomic. Graph replacement clears old edges before nodes, relies on declared cascades for dependent rows, then writes all new facts before committing. Validation and foreign-key failures preserve the previous graph. Source analysis runs outside the write transaction.
+
+Rust navigation opens one read-only revision snapshot and retains it until the reader is dropped. Project selection, revision checks, node details, relationships, and diagnostics use that same snapshot. It never creates or migrates storage.
+
+Dashboard composition opens one explicit deferred transaction for the complete graph view. Table services receive repositories bound to that transaction. Repository listing also combines registration and revision data within one snapshot. Do not replace these scopes with a separate transaction for each service call.
+
+## Where to change code
+
+| Change | Start here |
+| --- | --- |
+| CLI syntax or output | `matis-rust/src/matis/cli/` |
+| Analysis execution | `matis-rust/src/matis/indexer.rs` |
+| Table reads or writes | Its sole repository in the ownership table |
+| Validation or capability behavior | Its owning service |
+| Saved graph replacement, summaries, reports | `services/saved_graph.rs` and `services/repository_workflow.rs` |
+| Storage construction or database selection | Rust `bootstrap.rs`; dashboard repository `factory.ts` |
+| Saved graph traversal | Rust `services/navigation*.rs` |
+| Dashboard graph response | `services/graph-view.ts` and `services/graph-details.ts` |
+| Graph projection calculations | Dashboard `project-graph*.ts`, `graph-analysis.ts`, and graph helpers |
+| Ownership guardrails | Rust `tests/integration/architecture/ownership.rs`; dashboard `tests/database-*` |
 
 ## Compatibility
 
-CLI arguments, manifest JSON, candidate hashes, reports from valid normalized graphs, SQLite schema, and dashboard contracts stay unchanged. Service construction does not migrate storage implicitly. Atomic writes, snapshot lifetimes, bounded navigation, containment checks, locks, and mutation restoration stay in their current owners.
+CLI arguments, normalized SQLite schema, graph revisions, report JSON, and dashboard API responses stay unchanged. Opening a service does not implicitly migrate storage.
 
-The Rust free function `services::repositories::saved_folder_report(root)` becomes an explicit service operation. Library callers must select their database at the composition boundary:
+The Rust library API changes intentionally: persistence is private, `RepositoryProtocol` is removed, and the registration-only `RepositoryService` no longer exposes graph workflows. Existing command-facing callers use the workflow returned by bootstrap:
 
 ```rust
-let mut service = matis::bootstrap::repository_service(database_path)?;
-let report = service.saved_folder_report(root)?;
+let mut workflow = matis::bootstrap::repository_service(database_path)?;
+let report = workflow.saved_folder_report(root)?;
 ```
 
-`RepositoryProtocol::mutation_candidates` has a report-facts fallback so existing implementations still compile. An absent candidate field means empty legacy data; a present non-array returns an error. The SQLite store overrides it with a candidate-only transaction. Fresh mutation commands intentionally stop depending on unrelated graph-analysis failures. Saved mutation commands still reject absent or unrevisioned graphs.
+Custom library integrations use the capability ports in `domain/storage.rs` and the corresponding service constructors. They must supply a shared transaction scope for multi-capability operations. There is no public raw-store escape hatch.
 
-Saved reports use the shared normalizer. Library-provided facts must have a node array. Missing or empty `edges` can fall back to legacy `imports`; explicitly malformed edge fields return an error instead of hiding relationships. Normalized SQLite reads already meet these requirements.
+## Checks and test ownership
 
-## Test ownership
+Rust architecture tests enforce exclusive table access, owner-service port access, private persistence, and acyclic service dependencies. Dashboard architecture tests enforce equivalent rules, including relative and aliased imports and storage-handle forwarding.
 
-A repeated assertion is not automatically a duplicate test. The same value can cross different failure boundaries. Keep tests that prove different contracts; remove repeated scenarios at the same boundary.
+Use existing behavioral contracts for registration conflicts, replacement rollback, revision consistency, bounded navigation, ordered reports and candidates, and Rust/Bun interoperability. Batch-read tests cover scopes above SQLite's conservative bind limit. Keep unit tests in memory; real database and process contracts stay in integration tests.
 
-| Behavior | Authoritative evidence |
-| --- | --- |
-| CLI syntax and validation | Direct parser tests; no indexing or child process |
-| Language extraction and graph semantics | In-memory tests and language samples/snapshots |
-| Dependency reachability | Existing independent walk oracle, including the exact diamond/cycle/duplicate/self-edge topology |
-| Candidate-only parity | One expanded CLI library contract: ordered multi-language candidates, ignores, raw-byte hash, full-analysis parity, saved parity, manifests, and stale-source rejection |
-| Candidate-only database reads | Real database contract with unrelated report storage unavailable; graph existence, ordering, and JSON errors |
-| Saved folder selection | Shared report/candidate scenario for URL exclusion, ambiguity, missing registration, and unindexed errors |
-| Saved replacement | Existing reindex scenario; old candidates disappear after changed/deleted sources |
-| Composition and workflow independence | One architecture test per boundary, with shared detector fixtures |
-| Migration idempotence | Existing migration contract, not repeated roundtrip setup |
-| Filesystem/process safety and Rust/Bun interoperability | Existing integration contracts; not replaced by in-memory tests |
+Run the component checks in `AGENTS.md`. Executable changes also require one whole-repository Matis check. Mutation targets cover the moved domain validation and capability-service modules; run only relevant targets when mutation testing is needed.
 
-The manually asserted dependency-metric test is removed only after its exact topology moves into the stronger oracle. The redundant second migration call is removed from the roundtrip test. New tests cover new execution and storage boundaries, not wrappers.
-
-Mutation targets for entrypoints, candidate extraction, mutation workflows, mutation CLI, persistence, and repository services now include their relevant integration owners. Their timeout is 1200 seconds: verification found native grammar rebuilds taking over the old 300-second limit. Targeted campaigns remain optional and do not replace component validation.
-
-## Deferred work
-
-Do not move every file, introduce new crates, add generic pipeline stages, or add ports around pure functions. Do not combine this change with borrowed resolver indexes, shared syntax-tree caching, filesystem-independent resolution, or dashboard projection extraction. Those require separate evidence and compatibility review. In particular, lexical path normalization must not silently replace symlink-aware resolution.
+Do not introduce a generic CRUD layer, a pipeline framework, another crate, or a second application server for this boundary. Do not move pure analysis into services merely to match a folder pattern.

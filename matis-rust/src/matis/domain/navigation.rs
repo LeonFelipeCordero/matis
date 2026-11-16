@@ -2,6 +2,10 @@ use anyhow::Result;
 use serde_json::{Value, json};
 use std::fmt;
 
+pub enum ProjectSelector<'a> {
+    Name(&'a str),
+    Directory(&'a std::path::Path),
+}
 pub type Record = Value;
 #[derive(Debug)]
 pub struct NavigationError(pub String);
@@ -29,6 +33,15 @@ impl GraphSnapshot {
     pub fn metadata(&self) -> Value {
         json!({"repositoryId": self.repository_id, "graphRevision": self.revision, "indexedAt": self.indexed_at})
     }
+}
+pub struct ChildrenRequest<'a> {
+    pub key: &'a str,
+    pub limit: usize,
+    pub offset: usize,
+}
+pub struct AdjacencyFilter<'a> {
+    pub outgoing: bool,
+    pub relation: &'a str,
 }
 #[derive(Clone, Debug)]
 pub struct EdgeRequest {

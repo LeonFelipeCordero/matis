@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { rustCli, rustFixture } from '../../tests/rust-cli'
 import { migratedDatabaseFixture } from '../../tests/migrated-database-fixture'
@@ -83,7 +83,11 @@ function fixture(): Artifact {
     return node
   }
   add({ key: 'repo', type: 'repository', level: 'repository', parent: null })
-  add({ key: 'a.py', type: 'file', level: 'file', parent: 'repo' })
+  add({ key: 'a.py', type: 'file', level: 'file', parent: 'repo' }).properties =
+    {
+      bytes: 123,
+      sha256: 'fixture-digest',
+    }
   add({ key: 'b.py', type: 'file', level: 'file', parent: 'repo' })
   add({ key: 'test_a.py', type: 'file', level: 'file', parent: 'repo' })
   add({ key: 'C', type: 'class', level: 'type', parent: 'a.py' })
@@ -182,10 +186,19 @@ function expectPartialDetails(view: GraphView) {
   })
   expect(
     view.details.nodes.find((node) => node.stableKey === 'a.py')!.properties,
-  ).toMatchObject({ fanIn: 1, fanOut: 2, instability: 2 / 3 })
+  ).toMatchObject({
+    fanIn: 1,
+    fanOut: 2,
+    instability: 2 / 3,
+    bytes: 123,
+    sha256: 'fixture-digest',
+  })
   expect(
     view.details.nodes.find((node) => node.stableKey === 'b.py')!.properties,
   ).toMatchObject({ fanIn: 1, fanOut: 1, instability: 0.5 })
+  expect(
+    view.details.nodes.find((node) => node.stableKey === 'b.py')!.properties,
+  ).not.toHaveProperty('bytes')
   const nested = view.details.nodes.find((node) => node.stableKey === 'nested')!
   expect(nested).toMatchObject({
     signature: null,
@@ -469,7 +482,26 @@ test('ORM key batches preserve large scoped details, decorators, edge order and 
     }))
   artifact.edges.push(...edges)
   const id = save(artifact)
-  const view = ready(id, { kind: 'file', key: 'a.py' })
+  const statements: Array<string> = []
+  const original = Database.prototype.prepare
+  const reads = spyOn(Database.prototype, 'prepare').mockImplementation(
+    function (this: Database, sql: string) {
+      statements.push(sql)
+      return original.call(this, sql)
+    } as typeof original,
+  )
+  let view: GraphView
+  try {
+    view = ready(id, { kind: 'file', key: 'a.py' })
+  } finally {
+    reads.mockRestore()
+  }
+  // A 510-node view must use bounded batches, not one query per node.
+  expect(statements.length).toBeGreaterThan(0)
+  expect(statements.length).toBeLessThan(30)
+  expect(
+    Math.max(...statements.map((sql) => sql.match(/\?/g)?.length ?? 0)),
+  ).toBeLessThanOrEqual(502)
   expect(
     view.details.nodes.filter((node) => node.stableKey.startsWith('extra:')),
   ).toHaveLength(510)
@@ -511,6 +543,8 @@ test('valid normalized empty graphs differ from unindexed rows and invalid scope
   }
   expect(repositoryErrorResponse(error).status).toBe(400)
   expect(database.inTransaction).toBe(false)
+  expect(service.listRepositories()).toHaveLength(1)
+  expect(ready(id)).toMatchObject({ graph: { nodes: [], edges: [] } })
   expect(() => architectureScope(new URLSearchParams('kind=callable'))).toThrow(
     'Invalid graph scope',
   )

@@ -1,3 +1,6 @@
+#[path = "architecture/ownership.rs"]
+mod ownership;
+
 use std::{
     collections::BTreeSet,
     fs,

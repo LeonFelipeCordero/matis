@@ -10,6 +10,8 @@ import {
   serviceFile,
 } from './database-architecture'
 
+import { ownership } from './database-ownership-policy'
+
 const root = fileURLToPath(new URL('..', import.meta.url))
 function productionFiles(directory = root): Array<string> {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -37,6 +39,56 @@ test('all dashboard production follows service -> repository -> ORM, including b
   ).toEqual([])
 })
 
+test('each table and port permits only its exact owner, including aliases and relative paths', () => {
+  for (const [table, repository, port, owner] of ownership) {
+    const repositoryFile = `${repositoryRoot}${repository}.ts`
+    const ownerFile = `src/lib/services/${owner}.ts`
+    const wrongOwner =
+      owner === 'node-service' ? 'node-metrics-service' : 'node-service'
+    const tableImport = `import { ${table} as table } from './schema'`
+    const portImport = `import type { ${port} as Port } from '../repository-ports'`
+    expect(auditSource(repositoryFile, tableImport)).toEqual([])
+    expect(auditSource(ownerFile, portImport)).toEqual([])
+    expect(
+      auditSource(`src/lib/services/${wrongOwner}.ts`, portImport).length,
+    ).toBeGreaterThan(0)
+    expect(
+      auditSource(`${repositoryRoot}factory.ts`, tableImport).length,
+    ).toBeGreaterThan(0)
+    const bypasses = [
+      `import { ${table} as table } from '@/lib/persistence/repositories/schema'`,
+      `import { ${table} as table } from '../persistence/repositories/../repositories/schema.js'`,
+      `import * as tables from '@/lib/persistence/repositories/schema'`,
+      `const tables = await import('@/lib/persistence/repositories/schema')`,
+      `type Tables = import('@/lib/persistence/repositories/schema')`,
+      `export { ${table} as table } from '@/lib/persistence/repositories/schema'`,
+    ]
+    expect(
+      bypasses.every((source) => auditSource(ownerFile, source).length > 0),
+    ).toBe(true)
+    expect(
+      auditSource(`${repositoryRoot}another-repository.ts`, tableImport).length,
+    ).toBeGreaterThan(0)
+    expect(
+      auditSource(
+        repositoryFile,
+        `import { Other } from './node-metrics-repository'`,
+      ).length,
+    ).toBeGreaterThan(0)
+  }
+  for (const file of ['factory.ts', 'schema.ts', 'alternate-repository.ts'])
+    expect(
+      auditSource(`${repositoryRoot}${file}`, 'database.select().from(table)')
+        .length,
+    ).toBeGreaterThan(0)
+  expect(
+    auditSource(
+      `${repositoryRoot}node-repository.ts`,
+      "import { sqliteTable } from 'drizzle-orm/sqlite-core'",
+    ).length,
+  ).toBeGreaterThan(0)
+})
+
 test('service exports only operations, DTOs and lifecycle, never persistence handles', () => {
   const config = ts.readConfigFile(join(root, 'tsconfig.json'), ts.sys.readFile)
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root)
@@ -47,7 +99,7 @@ test('service exports only operations, DTOs and lifecycle, never persistence han
       program.getSourceFile(join(root, serviceFile))!,
     ),
   ).toEqual([])
-})
+}, 30_000)
 
 const failures = [
   "import { GraphStore as Renamed } from '@/lib/persistence/repositories/graph-store'; new Renamed(db)",

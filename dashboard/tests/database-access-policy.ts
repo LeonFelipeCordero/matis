@@ -1,5 +1,6 @@
 import ts from 'typescript-ast'
 import {
+  factory,
   infrastructure,
   ormMethods,
   rawMethods,
@@ -15,6 +16,7 @@ import {
   property,
   rootName,
 } from './database-syntax'
+import { repositoryPort } from './database-ownership-policy'
 import type { Reporter } from './database-syntax'
 
 type AccessContext = { file: string; sensitive: Set<string>; report: Reporter }
@@ -44,10 +46,29 @@ function checkOrmAccess(
 ) {
   const member = property(node)
   if (!member) return
-  if (ormMethods.has(member) && !file.startsWith(repositoryRoot))
-    report(node, 'ORM/driver call outside repository')
+  if (
+    ormMethods.has(member) &&
+    !repositoryPort(file) &&
+    !(file === `${factory}.ts` && member === 'transaction')
+  )
+    report(
+      node,
+      'ORM/driver call outside exact table repository or snapshot composition',
+    )
   if (['update', 'delete'].includes(member))
     checkWriteAccess(node, { file, sensitive, report })
+  if (
+    file === `${factory}.ts` &&
+    ormMethods.has(member) &&
+    member !== 'transaction'
+  )
+    report(node, 'composition cannot query tables')
+  if (
+    member === 'transaction' &&
+    file.startsWith(repositoryRoot) &&
+    file !== `${factory}.ts`
+  )
+    report(node, 'only composition owns the read snapshot')
   if (file === infrastructure && ormMethods.has(member))
     report(node, 'connection infrastructure cannot query domain data')
 }

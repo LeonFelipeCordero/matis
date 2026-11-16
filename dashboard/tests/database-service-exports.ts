@@ -22,7 +22,8 @@ function persistenceType(type: ts.Type) {
   return (
     declarations.some(
       (node) =>
-        ts.isTypeAliasDeclaration(node) && node.name.text === 'RepositoryPort',
+        ts.isTypeAliasDeclaration(node) &&
+        /repository-ports\.ts$/.test(node.getSourceFile().fileName),
     ) || declarations.some(persistenceDeclaration)
   )
 }

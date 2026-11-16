@@ -13,17 +13,6 @@ pub mod repositories {
     pub enum Relation {}
     impl ActiveModelBehavior for ActiveModel {}
 }
-pub use repositories::Model as RepositoryRow;
-impl sea_orm::Related<repository_graphs::Entity> for repositories::Entity {
-    /// Define the registration-to-graph join by repository ID without executing a query.
-    fn to() -> sea_orm::RelationDef {
-        use sea_orm::EntityTrait;
-        repositories::Entity::belongs_to(repository_graphs::Entity)
-            .from(repositories::Column::Id)
-            .to(repository_graphs::Column::RepositoryId)
-            .into()
-    }
-}
 pub mod repository_graphs {
     use sea_orm::entity::prelude::*;
     #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -68,26 +57,6 @@ pub mod graph_nodes {
     impl ActiveModelBehavior for ActiveModel {}
 }
 pub use graph_nodes::Model as GraphNodeRow;
-impl sea_orm::Related<graph_symbols::Entity> for graph_nodes::Entity {
-    /// Define the node-to-symbol join by repository ID and node key without querying.
-    fn to() -> sea_orm::RelationDef {
-        use sea_orm::EntityTrait;
-        graph_nodes::Entity::belongs_to(graph_symbols::Entity)
-            .from((graph_nodes::Column::RepositoryId, graph_nodes::Column::NodeKey))
-            .to((graph_symbols::Column::RepositoryId, graph_symbols::Column::NodeKey))
-            .into()
-    }
-}
-impl sea_orm::Related<graph_files::Entity> for graph_nodes::Entity {
-    /// Define the node-to-file join by repository ID and node key without querying.
-    fn to() -> sea_orm::RelationDef {
-        use sea_orm::EntityTrait;
-        graph_nodes::Entity::belongs_to(graph_files::Entity)
-            .from((graph_nodes::Column::RepositoryId, graph_nodes::Column::NodeKey))
-            .to((graph_files::Column::RepositoryId, graph_files::Column::NodeKey))
-            .into()
-    }
-}
 pub mod graph_files {
     use sea_orm::entity::prelude::*;
     #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]

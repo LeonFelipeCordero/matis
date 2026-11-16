@@ -1,43 +1,35 @@
 import { eq } from 'drizzle-orm'
-import { repositories, repositoryGraphs } from './schema'
+import { repositories } from './schema'
 import type { AppDatabase } from './connection'
-import type { Repository } from '../../api'
+import type { RepositoryRepositoryPort } from '../../repository-ports'
+import type { RepositoryRecord } from '../../graph-records'
 
-/** Shared-file access only; schema and graph writes belong to Python. */
-export class RepositoryStore {
+export class RepositoryStore implements RepositoryRepositoryPort {
   constructor(private readonly database: AppDatabase) {}
 
-  register({ id, name, location, createdAt }: Omit<Repository, 'importedAt'>) {
-    const row = this.database
+  register(input: RepositoryRecord) {
+    return this.database
       .insert(repositories)
-      .values({ id, name, location, createdAt })
+      .values(input)
       .onConflictDoNothing()
       .returning()
       .all()
       .at(0)
-    return row ? { ...row, importedAt: null } : undefined
+  }
+
+  find(id: string) {
+    return this.database
+      .select()
+      .from(repositories)
+      .where(eq(repositories.id, id))
+      .get()
   }
 
   list() {
     return this.database
-      .select({
-        id: repositories.id,
-        name: repositories.name,
-        location: repositories.location,
-        createdAt: repositories.createdAt,
-        graphRevision: repositoryGraphs.graphRevision,
-        importedAt: repositoryGraphs.importedAt,
-      })
+      .select()
       .from(repositories)
-      .leftJoin(
-        repositoryGraphs,
-        eq(repositories.id, repositoryGraphs.repositoryId),
-      )
       .orderBy(repositories.createdAt, repositories.id)
       .all()
-      .map(({ graphRevision, importedAt, ...row }) => ({
-        ...row,
-        importedAt: graphRevision === null ? null : importedAt,
-      }))
   }
 }

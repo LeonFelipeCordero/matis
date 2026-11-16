@@ -1,15 +1,6 @@
 import ts from 'typescript-ast'
-import { repositoryRoot, serviceFile } from './database-architecture'
-
-function ownsRepositoryDependencies(file: string) {
-  const normalized = file.replaceAll('\\', '/')
-  return (
-    normalized.includes(`/${repositoryRoot}`) ||
-    normalized.startsWith(repositoryRoot) ||
-    normalized.endsWith(`/${serviceFile}`) ||
-    normalized === serviceFile
-  )
-}
+import { factory } from './database-policy'
+import { permittedPorts, repositoryPort } from './database-ownership-policy'
 
 function applicationDeclaration(node: ts.Node) {
   return /(?:^|\/)src\//.test(node.getSourceFile().fileName)
@@ -47,7 +38,10 @@ function dependencyBinding(node: ts.Node) {
   )
 }
 
-function dependencyInspector(checker: ts.TypeChecker) {
+function dependencyInspector(
+  checker: ts.TypeChecker,
+  allowed = new Set<string>(),
+) {
   const inspect = (type: ts.Type, seen = new Set<ts.Type>()): boolean => {
     if (
       seen.has(type) ||
@@ -59,12 +53,26 @@ function dependencyInspector(checker: ts.TypeChecker) {
       ...(type.getSymbol()?.declarations ?? []),
       ...(type.aliasSymbol?.declarations ?? []),
     ]
-    if (
-      declarations.some((node) =>
-        /(?:^|\/)repository-ports\.ts$/.test(node.getSourceFile().fileName),
-      )
+    const port = declarations.find((node) =>
+      /(?:^|\/)repository-ports\.ts$/.test(node.getSourceFile().fileName),
     )
-      return true
+    if (port) {
+      let declaration: ts.Node = port
+      while (
+        !ts.isTypeAliasDeclaration(declaration) &&
+        !ts.isSourceFile(declaration)
+      )
+        declaration = declaration.parent
+      if (ts.isTypeAliasDeclaration(declaration))
+        return !allowed.has(declaration.name.text)
+    }
+    const implementation = declarations
+      .filter(
+        (node) => ts.isClassDeclaration(node) || ts.isMethodDeclaration(node),
+      )
+      .map((node) => repositoryPort(node.getSourceFile().fileName))
+      .find(Boolean)
+    if (implementation) return !allowed.has(implementation)
     if (type.isUnionOrIntersection())
       return type.types.some((part) => inspect(part, seen))
     // Structural aliases and inferred factory results are ports too, not just named types.
@@ -92,7 +100,18 @@ function dependencyInspector(checker: ts.TypeChecker) {
     )
       return true
     return type.getProperties().some((member) => {
-      const declaration = member.declarations?.find(applicationDeclaration)
+      const declaration = member.declarations?.find(
+        (candidate) =>
+          applicationDeclaration(candidate) &&
+          !(
+            ts.canHaveModifiers(candidate) &&
+            ts
+              .getModifiers(candidate)
+              ?.some(
+                (modifier) => modifier.kind === ts.SyntaxKind.PrivateKeyword,
+              )
+          ),
+      )
       return (
         declaration &&
         inspect(checker.getTypeOfSymbolAtLocation(member, declaration), seen)
@@ -165,26 +184,19 @@ function valueInspector(
   return inspect
 }
 
-function externalCall(
-  node: ts.CallExpression | ts.NewExpression,
-  checker: ts.TypeChecker,
-) {
-  const declaration = checker.getResolvedSignature(node)?.declaration
-  return (
-    !declaration ||
-    !ownsRepositoryDependencies(declaration.getSourceFile().fileName)
-  )
-}
-
 /** Type/dependency check across the program, including private helpers and constructors. */
 export function auditRepositoryDependencies(
   program: ts.Program,
   source: ts.SourceFile,
 ) {
   const checker = program.getTypeChecker()
-  const containsDependency = dependencyInspector(checker)
-  const containsValue = valueInspector(checker, containsDependency, source)
-  const owner = ownsRepositoryDependencies(source.fileName)
+  const normalized = source.fileName.replaceAll('\\', '/')
+  const composition =
+    normalized === `${factory}.ts` || normalized.endsWith(`/${factory}.ts`)
+  const containsDependency = dependencyInspector(
+    checker,
+    permittedPorts(normalized),
+  )
   const errors: Array<string> = []
   const report = (node: ts.Node, message: string) =>
     errors.push(
@@ -192,20 +204,35 @@ export function auditRepositoryDependencies(
     )
   const visit = (node: ts.Node) => {
     if (
-      !owner &&
+      !composition &&
       dependencyBinding(node) &&
       containsDependency(checker.getTypeAtLocation(node))
     )
       report(node, 'repository dependency outside service/repository')
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
-      const dependency = node.arguments?.some((argument) =>
-        containsValue(argument),
+      const target =
+        checker.getResolvedSignature(node)?.declaration?.getSourceFile()
+          .fileName ?? ''
+      const inspect = valueInspector(
+        checker,
+        dependencyInspector(checker, permittedPorts(target)),
+        source,
       )
-      if (dependency && externalCall(node, checker))
+      if (node.arguments?.some((argument) => inspect(argument)))
         report(
           node,
           'repository dependency delegated outside service/repository',
         )
+      if (
+        composition &&
+        ts.isCallExpression(node) &&
+        (ts.isPropertyAccessExpression(node.expression) ||
+          ts.isElementAccessExpression(node.expression)) &&
+        dependencyInspector(checker)(
+          checker.getTypeAtLocation(node.expression.expression),
+        )
+      )
+        report(node, 'composition may construct repositories, not call them')
     }
     ts.forEachChild(node, visit)
   }
