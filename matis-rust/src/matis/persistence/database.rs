@@ -73,8 +73,3 @@ pub fn migrate_database(path: Option<&Path>) -> Result<()> {
     let connection = create_engine(path)?;
     run(super::migrations::migrate(&connection)).map_err(storage_error)
 }
-/// Open a writable connection at the supplied/default path without migrating or starting a transaction.
-/// May create the file and parent directories; propagate path, filesystem, and connection errors.
-pub fn repository_session(path: Option<&Path>) -> Result<DatabaseConnection> {
-    create_engine(path)
-}

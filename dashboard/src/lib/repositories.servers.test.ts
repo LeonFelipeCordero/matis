@@ -64,6 +64,7 @@ afterEach(() => {
 })
 
 test('UI opens a Rust-migrated database without owning migrations', () => {
+  expect(service.listRepositories()).toEqual([])
   const repository = registerRepository(
     { name: ' Example ', location: ' /work/example ' },
     database,
@@ -118,7 +119,10 @@ test('missing or unmigrated databases fail without creating a schema', () => {
 })
 
 test('name uniqueness and validation retain existing API behavior', () => {
-  registerRepository({ name: 'Example', location: 'local' }, database)
+  const repository = registerRepository(
+    { name: 'Example', location: 'local' },
+    database,
+  )
   expect(() =>
     registerRepository({ name: 'EXAMPLE', location: 'other' }, database),
   ).toThrow('already exists')
@@ -132,7 +136,7 @@ test('name uniqueness and validation retain existing API behavior', () => {
     { name: 'x'.repeat(201), location: 'x' },
   ])
     expect(() => registerRepository(input, database)).toThrow()
-  expect(listRepositories(database)).toHaveLength(1)
+  expect(listRepositories(database)).toEqual([repository])
   expect(() => getArchitecture('unknown', database)).toThrow(
     'Repository not found',
   )
@@ -321,10 +325,7 @@ test('one read transaction keeps metadata and nodes on one WAL snapshot', () => 
   ) {
     expect(this.inTransaction).toBe(true)
     connection = this
-    if (
-      !interleaved &&
-      sql.includes('from "graph_nodes" left join "graph_symbols"')
-    ) {
+    if (!interleaved && sql.includes('from "repository_graphs"')) {
       interleaved = true
       matis('index', '-f', source)
     }
@@ -340,6 +341,52 @@ test('one read transaction keeps metadata and nodes on one WAL snapshot', () => 
   expect(after.graphRevision).not.toBe(before.graphRevision)
   expect(after.graph.nodes.map((node) => node.label)).toEqual(['after'])
   expect(connection?.inTransaction).toBe(false)
+
+  const failure = spyOn(Database.prototype, 'prepare').mockImplementation(
+    function (this: Database, sql: string) {
+      connection = this
+      if (sql.includes('from "graph_node_metrics"'))
+        throw new Error('read interrupted')
+      return original.call(this, sql)
+    } as typeof original,
+  )
+  try {
+    expect(() => fileView(repository.id)).toThrow('read interrupted')
+    expect(connection?.inTransaction).toBe(false)
+  } finally {
+    failure.mockRestore()
+  }
+  expect(fileView(repository.id)).toEqual(after)
+  expect(listRepositories(database)[0].importedAt).toBe(after.importedAt)
+
+  const listedBefore = service.listRepositories()
+  interleaved = false
+  const listing = spyOn(Database.prototype, 'prepare').mockImplementation(
+    function (this: Database, sql: string) {
+      expect(this.inTransaction).toBe(true)
+      if (!interleaved && sql.includes('from "repository_graphs"')) {
+        interleaved = true
+        database.transaction(() => {
+          database.run('UPDATE repository_graphs SET imported_at = 123')
+          database.run(
+            'INSERT INTO repositories (id, name, location, created_at) VALUES (?, ?, ?, ?)',
+            ['concurrent', 'Concurrent', '/fixture', 1],
+          )
+        })()
+      }
+      return original.call(this, sql)
+    } as typeof original,
+  )
+  try {
+    expect(service.listRepositories()).toEqual(listedBefore)
+    expect(interleaved).toBe(true)
+  } finally {
+    listing.mockRestore()
+  }
+  expect(service.listRepositories()).toEqual([
+    expect.objectContaining({ id: 'concurrent', importedAt: null }),
+    { ...listedBefore[0], importedAt: 123 },
+  ])
 })
 
 test('error responses remain JSON with the expected status', async () => {

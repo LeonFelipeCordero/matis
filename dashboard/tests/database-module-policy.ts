@@ -9,6 +9,10 @@ import {
   repositoryRoot,
   serviceFile,
 } from './database-policy'
+import {
+  capabilityFiles,
+  checkTableOwnership,
+} from './database-ownership-policy'
 import type { Reporter } from './database-syntax'
 
 function modulePath(file: string, name: string) {
@@ -35,7 +39,8 @@ function permittedFactory(node: ts.Node, resolved: string) {
 type ModuleContext = { file: string; name: string; report: Reporter }
 function checkRepositoryModule(node: ts.Node, context: ModuleContext) {
   const { file, name, report } = context
-  const resolved = modulePath(file, name)
+  const resolved = modulePath(file, name).replace(/\.[cm]?[jt]sx?$/, '')
+  checkTableOwnership(node, file, resolved, report)
   const repositoryModule =
     resolved.includes(repositoryRoot) ||
     resolved.endsWith(repositoryRoot.slice(0, -1))
@@ -63,7 +68,8 @@ function checkPortModule(node: ts.Node, { file, name, report }: ModuleContext) {
   if (
     /(?:^|\/)repository-ports(?:\.ts)?$/.test(name) &&
     !file.startsWith(repositoryRoot) &&
-    file !== serviceFile
+    file !== serviceFile &&
+    !capabilityFiles.has(file)
   )
     report(node, 'repository port dependency outside service/repository')
 }
@@ -92,6 +98,11 @@ export function checkModule(node: ts.Node, context: ModuleContext) {
     report(node, 'alternate driver/module loader bypass')
   if (/\.(?:sqlite|sqlite3|db)$/.test(name))
     report(node, 'database file import bypass')
+  if (
+    name.startsWith('drizzle-orm/sqlite-core') &&
+    context.file !== `${repositoryRoot}schema.ts`
+  )
+    report(node, 'table definitions belong only to shared schema mapping')
   if (name.startsWith('drizzle-orm')) checkOrmModule(node, report)
 }
 function checkOrmModule(node: ts.Node, report: Reporter) {

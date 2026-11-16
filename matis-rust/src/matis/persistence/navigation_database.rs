@@ -44,6 +44,14 @@ async fn check_schema(connection: &DatabaseTransaction) -> Result<()> {
     Ok(())
 }
 pub struct ReadTransaction(Option<DatabaseTransaction>);
+impl ReadTransaction {
+    pub(super) fn new(transaction: DatabaseTransaction) -> Self {
+        Self(Some(transaction))
+    }
+    pub(super) fn take(mut self) -> DatabaseTransaction {
+        self.0.take().expect("active transaction")
+    }
+}
 impl std::ops::Deref for ReadTransaction {
     type Target = DatabaseTransaction;
     /// Borrow the active read transaction; panic if its internal transaction is absent.

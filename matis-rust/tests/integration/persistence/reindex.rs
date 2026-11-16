@@ -7,7 +7,6 @@ use matis::{
     metrics::report::build_artifact_report,
 };
 use project::Project;
-use sea_orm::ConnectionTrait;
 use serde_json::json;
 use std::fs;
 
@@ -66,42 +65,6 @@ fn changed_then_deleted_sources_replace_the_graph_without_registering_another_pr
     assert_eq!(
         reopened.saved_folder_report(&project.root)?,
         build_artifact_report(&analyze_repository(&project.root)?)?
-    );
-    Ok(())
-}
-
-#[test]
-fn candidate_reads_skip_report_facts_and_require_a_revisioned_graph() -> anyhow::Result<()> {
-    use matis::{
-        domain::repositories::RepositoryProtocol,
-        persistence::{database::repository_session, repositories::repository_store},
-    };
-
-    let project = Project::new("def brew():\n    return 1 < 2 and 3 != 4\n");
-    let mut store = repository_store(Some(&project.database))?;
-    let id = &project.saved.repository_id;
-    assert_eq!(json!(store.mutation_candidates(id)?.unwrap()), project.graph["mutationCandidates"]);
-    assert_eq!(store.mutation_candidates("missing")?, None);
-    let unindexed = store.register("Unindexed", "/unindexed")?;
-    assert_eq!(store.mutation_candidates(&unindexed.id)?, None);
-
-    // Candidate reads must work even when unrelated report storage cannot be read.
-    let connection = repository_session(Some(&project.database))?;
-    let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(connection.execute_unprepared("DROP TABLE graph_node_metrics"))?;
-    assert!(store.report_facts(id).is_err());
-    assert_eq!(json!(store.mutation_candidates(id)?.unwrap()), project.graph["mutationCandidates"]);
-    runtime.block_on(connection.execute_unprepared("UPDATE graph_mutation_candidates SET payload = 'invalid JSON'"))?;
-    let error = store.mutation_candidates(id).unwrap_err();
-    assert_eq!(error.downcast_ref::<RepositoryError>().unwrap().status, 500);
-
-    runtime.block_on(connection.execute_unprepared("UPDATE repository_graphs SET graph_revision = NULL"))?;
-    assert_eq!(store.mutation_candidates(id)?, None);
-    assert_eq!(store.report_facts(id)?, None);
-    let mut service = repository_service(Some(&project.database))?;
-    assert_eq!(
-        service.saved_folder_candidates(&project.root).unwrap_err().downcast_ref::<RepositoryError>().unwrap().status,
-        409
     );
     Ok(())
 }

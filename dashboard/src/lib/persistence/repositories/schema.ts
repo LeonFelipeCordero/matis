@@ -1,6 +1,6 @@
 import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
-// Maps the shared Alembic schema; Python remains its sole migration owner.
+// Maps the shared SQLite schema; Rust remains its sole migration owner.
 export const repositories = sqliteTable('repositories', {
   id: text().primaryKey(),
   name: text().notNull(),

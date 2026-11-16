@@ -3,60 +3,24 @@ import {
   repositoryDatabasePath,
 } from './persistence/repositories/factory'
 import { GraphScopeError } from './project-graph'
+import { RepositoryError, requiredText } from './services/repository-error'
 import type { GraphScope } from './project-graph-types'
-import type { RepositoryPort } from './repository-ports'
 
-export class RepositoryError extends Error {
-  constructor(
-    message: string,
-    public readonly status: 400 | 404 | 409,
-  ) {
-    super(message)
-    this.name = 'RepositoryError'
-  }
-}
+export { RepositoryError } from './services/repository-error'
 
-const requiredText = (value: unknown, field: string, maxLength: number) => {
-  if (typeof value !== 'string' || !value.trim())
-    throw new RepositoryError(`${field} is required`, 400)
-  const text = value.trim()
-  if (text.length > maxLength)
-    throw new RepositoryError(
-      `${field} must be at most ${maxLength} characters`,
-      400,
-    )
-  return text
-}
-
-function register(store: RepositoryPort, input: unknown) {
-  if (!input || typeof input !== 'object' || Array.isArray(input))
-    throw new RepositoryError('Expected an object with name and location', 400)
-  const data = input as Record<string, unknown>
-  const name = requiredText(data.name, 'name', 200)
-  const location = requiredText(data.location, 'location', 4096)
-  const repository = store.register({
-    id: crypto.randomUUID(),
-    name,
-    location,
-    createdAt: Date.now(),
-  })
-  if (!repository)
-    throw new RepositoryError('A repository with this name already exists', 409)
-  return repository
-}
-
-/** Service owns repository construction/lifetime. Consumers receive only DTOs and operations. */
+/** Public API facade; bootstrap composes services and owns connection lifetime. */
 export function createRepositoryService(path?: string) {
   const repository = createRepositoryContext(path)
   return {
-    registerRepository: (input: unknown) => register(repository, input),
-    listRepositories: () => repository.list(),
+    registerRepository: (input: unknown) =>
+      repository.registerRepository(input),
+    listRepositories: () => repository.listRepositories(),
     getArchitecture(
       repositoryId: string,
       scope: GraphScope = { kind: 'repository' },
     ) {
       const id = requiredText(repositoryId, 'repositoryId', 200)
-      const graph = repository.view(id, scope)
+      const graph = repository.getArchitecture(id, scope)
       if (graph === undefined)
         throw new RepositoryError('Repository not found', 404)
       return graph

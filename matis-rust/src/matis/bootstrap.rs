@@ -1,22 +1,48 @@
-use crate::persistence::{
-    navigation::{ProjectSelector, navigation_reader},
-    repositories::repository_store,
+pub use crate::persistence::database::migrate_database;
+use crate::{
+    domain::navigation::ProjectSelector,
+    persistence::{self, session::Session},
+    services::{
+        diagnostics::DiagnosticService,
+        graph_revisions::GraphRevisionService,
+        mutation_candidates::MutationCandidateService,
+        navigation::NavigationService,
+        navigation_reader::CapabilityReader,
+        node_metrics::NodeMetricsService,
+        nodes::{NodeRepositories, NodeService},
+        relationships::RelationshipService,
+        repositories::RepositoryService,
+        repository_workflow::RepositoryWorkflow,
+        saved_graph::SavedGraphWorkflow,
+    },
 };
-use crate::services::{navigation::NavigationService, repositories::RepositoryService};
 use anyhow::Result;
 use std::path::Path;
 
-pub use crate::persistence::database::migrate_database;
-/// Open a repository service at the supplied/default database path without migrating.
-/// May create the file/directories; propagate open/path errors. Store methods own write commits.
-pub fn repository_service(path: Option<&Path>) -> Result<RepositoryService> {
-    Ok(RepositoryService::new(repository_store(path)?))
+fn repository(session: &Session) -> RepositoryService {
+    RepositoryService::new(persistence::repositories::Store(session.clone()))
 }
-/// Open navigation on one read-only snapshot at the supplied/default database path.
-/// Select `project` by ID/name, or the nearest project containing cwd when omitted;
-/// require `revision` to match when supplied. Dropping the service releases the snapshot.
-/// Return cwd/path, schema, missing/ambiguous project, stale revision, or database errors.
-/// Never create or migrate storage.
+fn graph(session: &Session) -> SavedGraphWorkflow {
+    SavedGraphWorkflow {
+        revisions: GraphRevisionService::new(persistence::revisions::Store(session.clone())),
+        nodes: NodeService::new(NodeRepositories {
+            nodes: Box::new(persistence::nodes::Store(session.clone())),
+            files: Box::new(persistence::files::Store(session.clone())),
+            symbols: Box::new(persistence::symbols::Store(session.clone())),
+            decorators: Box::new(persistence::decorators::Store(session.clone())),
+        }),
+        relationships: RelationshipService::new(persistence::relationships::Store(session.clone())),
+        metrics: NodeMetricsService::new(persistence::metrics::Store(session.clone())),
+        diagnostics: DiagnosticService::new(persistence::diagnostics::Store(session.clone())),
+        candidates: MutationCandidateService::new(persistence::candidates::Store(session.clone())),
+    }
+}
+/// Open a workflow without migrating. All capabilities share its transaction scope.
+pub fn repository_service(path: Option<&Path>) -> Result<RepositoryWorkflow> {
+    let session = Session::writable(path)?;
+    Ok(RepositoryWorkflow::new(repository(&session), graph(&session), session))
+}
+/// Compose capabilities on one read-only snapshot. Never create or migrate storage.
 pub fn navigation_service(
     project: Option<&str>,
     revision: Option<&str>,
@@ -28,4 +54,12 @@ pub fn navigation_service(
         None => ProjectSelector::Directory(&cwd),
     };
     Ok(NavigationService::new(navigation_reader(selector, revision, path)?))
+}
+pub(crate) fn navigation_reader(
+    project: ProjectSelector<'_>,
+    revision: Option<&str>,
+    path: Option<&Path>,
+) -> Result<CapabilityReader> {
+    let session = Session::readonly(path)?;
+    CapabilityReader::new(repository(&session), graph(&session), project)?.at_revision(revision)
 }

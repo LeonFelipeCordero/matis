@@ -1,6 +1,4 @@
-use matis::{
-    domain::repositories::RepositoryProtocol, persistence::repositories::repository_store,
-};
+use matis::bootstrap::repository_service;
 use serde_json::Value;
 use std::{env, error::Error, fs, path::Path};
 
@@ -9,11 +7,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     let output = match args.as_slice() {
         [command, source] if command == "analyze" => {
-            matis::services::repositories::analyze_folder(Path::new(source))?
+            matis::services::repository_workflow::analyze_folder(Path::new(source))?
         }
         [command, file, name] if command == "save" => {
             let artifact: Value = serde_json::from_str(&fs::read_to_string(file)?)?;
-            let graph = repository_store(None)?.save_new(name, name, &artifact)?;
+            let graph = repository_service(None)?.save_folder(Path::new(name), &artifact)?;
             Value::String(graph.repository_id)
         }
         [command, file] if command == "cycles" => {

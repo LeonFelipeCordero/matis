@@ -8,22 +8,7 @@ pub struct GraphMetadata {
     pub root_name: Option<String>,
     pub root_path: Option<String>,
 }
-/// Test Python-style falseness for JSON null, false, zero, and empty containers/strings.
-pub fn falsey(value: &Value) -> bool {
-    match value {
-        Value::Null => true,
-        Value::Bool(value) => !value,
-        Value::Number(number) => number.as_f64() == Some(0.0),
-        Value::String(value) => value.is_empty(),
-        Value::Array(value) => value.is_empty(),
-        Value::Object(value) => value.is_empty(),
-    }
-}
-/// Accept an object or any Python-falsey value; otherwise return an error naming `name`.
-pub fn optional_mapping(value: &Value, name: &str) -> Result<()> {
-    ensure!(value.is_object() || falsey(value), "Graph {name} must be an object or empty");
-    Ok(())
-}
+use crate::domain::graph_artifact::optional_mapping;
 impl GraphMetadata {
     /// Convert artifact metadata to SQLite-compatible values without writing rows.
     /// Missing fields become `None`; numeric text conversion may query `connection`.

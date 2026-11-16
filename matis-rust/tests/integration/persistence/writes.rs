@@ -1,5 +1,5 @@
-use super::{NavigationReader, ProjectSelector, artifact, database, navigation_reader, run};
-use crate::domain::repositories::{GraphDto, RepositoryError, RepositoryProtocol};
+use super::{NavigationReader, ProjectSelector, artifact, connection, database, navigation_reader, run};
+use crate::domain::repositories::{GraphDto, RepositoryError};
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use serde_json::{Value, json};
 
@@ -31,7 +31,7 @@ fn add_symbol_details(i: usize, node: &mut Value) {
     node["endColumn"] = json!(i + 4);
     node["signature"] = if i.is_multiple_of(2) { json!(format!("f{i}()")) } else { Value::Null };
     node["properties"]["visibility"] = json!("public");
-    for (offset, &name) in super::super::graph_records::METRIC_NAMES.iter().enumerate() {
+    for (offset, &name) in crate::domain::graph_artifact::METRIC_NAMES.iter().enumerate() {
         node["properties"][name] = json!(i + offset);
     }
 }
@@ -79,7 +79,7 @@ fn assert_symbol(detail: &Value, expected: &Value) {
     for field in ["decorators", "visibility"] {
         assert_eq!(detail[field], expected["properties"][field], "{field}");
     }
-    for field in super::super::graph_records::METRIC_NAMES {
+    for field in crate::domain::graph_artifact::METRIC_NAMES {
         assert_eq!(detail["metrics"][field], expected["properties"][field], "{field}");
     }
 }
@@ -93,8 +93,8 @@ fn repeated_writes_preserve_values_order_and_nulls() {
     assert_eq!(saved.stats.files, 200);
     assert_eq!(saved.stats.symbols, 200);
     assert_eq!(saved.stats.edges, 200);
-    assert_table_counts(&store);
-    let facts = store.report_facts(&saved.repository_id).unwrap().unwrap();
+    assert_table_counts(&db);
+    let facts = store.get_report_facts(&saved.repository_id).unwrap().unwrap();
     assert_eq!(facts["mutationCandidates"], payload["mutationCandidates"]);
     assert_eq!(facts["diagnostics"], payload["diagnostics"]);
     assert_eq!(facts["edges"], payload["edges"]);
@@ -113,14 +113,14 @@ fn repeated_writes_preserve_values_order_and_nulls() {
         );
     }
     let replacement = store.save(&saved.repository_id, &payload).unwrap();
-    assert_table_counts(&store);
+    assert_table_counts(&db);
     assert_ne!(replacement.graph_revision, saved.graph_revision);
     let mut expected = facts;
     expected["graphRevision"] = json!(replacement.graph_revision);
-    assert_eq!(store.report_facts(&saved.repository_id).unwrap().unwrap(), expected);
+    assert_eq!(store.get_report_facts(&saved.repository_id).unwrap().unwrap(), expected);
 }
 
-fn assert_table_counts(store: &super::RepositoryStore) {
+fn assert_table_counts(db: &std::path::Path) {
     for (table, expected) in [
         ("graph_nodes", 400),
         ("graph_files", 200),
@@ -131,8 +131,7 @@ fn assert_table_counts(store: &super::RepositoryStore) {
         ("graph_edges", 200),
         ("graph_diagnostics", 200),
     ] {
-        let row = run(store
-            .connection
+        let row = run(connection(db)
             .query_one(Statement::from_string(DbBackend::Sqlite, format!("SELECT COUNT(*) AS count FROM {table}"))))
         .unwrap()
         .unwrap();
@@ -141,17 +140,37 @@ fn assert_table_counts(store: &super::RepositoryStore) {
 }
 
 #[test]
+fn batched_detail_reads_keep_report_and_navigation_order_above_sqlite_bind_limit() {
+    let (_temp, db, mut store) = database();
+    let payload = repeated_artifact(1001);
+    let saved = store.save_new("Batched", "/batched", &payload).unwrap();
+    let facts = store.get_report_facts(&saved.repository_id).unwrap().unwrap();
+    assert_eq!(facts["nodes"].as_array().unwrap().len(), 1002);
+    assert_eq!(facts["nodes"][1001]["stableKey"], "symbol:1000");
+    assert_eq!(facts["nodes"][1001]["parameterCount"], 0);
+    let mut reader = navigation_reader(ProjectSelector::Name("Batched"), None, Some(&db)).unwrap();
+    let children = reader.children("file", 1001, 0).unwrap();
+    assert_eq!(children.len(), 1001);
+    assert_eq!(children[1000]["stableKey"], "symbol:1000");
+    assert_eq!(children[1000]["startLine"], 1001);
+    let mut paths = vec!["missing".to_owned(); 1001];
+    paths[0] = "sample.py".into();
+    paths[1000] = "sample.py".into();
+    assert_eq!(reader.diagnostics(&paths, 31).unwrap(), payload["diagnostics"].as_array().unwrap()[..31]);
+}
+
+#[test]
 fn child_before_parent_across_batches_preserves_node_ordinals() {
-    let (_temp, _, mut store) = database();
+    let (_temp, db, mut store) = database();
     let mut payload = repeated_artifact(200);
     payload["nodes"].as_array_mut().unwrap().rotate_left(1);
     let saved = store.save_new("Deferred", "/deferred", &payload).unwrap();
     store.save(&saved.repository_id, &payload).unwrap();
-    let facts = store.report_facts(&saved.repository_id).unwrap().unwrap();
+    let facts = store.get_report_facts(&saved.repository_id).unwrap().unwrap();
     let keys =
         |value: &Value| value["nodes"].as_array().unwrap().iter().map(|n| n["stableKey"].clone()).collect::<Vec<_>>();
     assert_eq!(keys(&facts), keys(&payload));
-    let rows = run(store.connection.query_all(Statement::from_string(
+    let rows = run(connection(&db).query_all(Statement::from_string(
         DbBackend::Sqlite,
         "SELECT node_key, parent_key, ordinal FROM graph_nodes ORDER BY ordinal",
     )))
@@ -164,7 +183,7 @@ fn child_before_parent_across_batches_preserves_node_ordinals() {
 
 #[test]
 fn mutation_candidate_columns_preserve_values_and_file_mapping() {
-    let (_temp, _, mut store) = database();
+    let (_temp, db, mut store) = database();
     let mut payload = repeated_artifact(0);
     payload["nodes"].as_array_mut().unwrap().push(json!({
         "stableKey": "other-file", "type": "file", "kind": "file", "level": "file",
@@ -177,7 +196,7 @@ fn mutation_candidate_columns_preserve_values_and_file_mapping() {
          "kind": "binary", "operator": null, "extra": [0, false]}
     ]);
     let saved = store.save_new("Candidates", "/candidates", &payload).unwrap();
-    let rows = run(store.connection.query_all(Statement::from_string(
+    let rows = run(connection(&db).query_all(Statement::from_string(
         DbBackend::Sqlite,
         "SELECT repository_id, candidate_id, file_key, ordinal, path, language, source_hash, \
          kind, operator, payload FROM graph_mutation_candidates ORDER BY ordinal",
@@ -210,11 +229,11 @@ fn assert_candidate_strings(row: &sea_orm::QueryResult, expected: &Value) {
 
 #[test]
 fn late_write_errors_roll_back_replacement_and_registration() {
-    let (temp, _, mut store) = database();
+    let (temp, db, mut store) = database();
     let original = artifact(temp.path());
     let saved = store.save_new("Original", "/original", &original).unwrap();
-    let facts = store.report_facts(&saved.repository_id).unwrap().unwrap();
-    run(store.connection.execute_unprepared(
+    let facts = store.get_report_facts(&saved.repository_id).unwrap().unwrap();
+    run(connection(&db).execute_unprepared(
         "CREATE TRIGGER reject_diagnostic BEFORE INSERT ON graph_diagnostics \
          WHEN NEW.message = 'rejected' BEGIN SELECT RAISE(ABORT, 'diagnostic rejected'); END; \
          CREATE TRIGGER ignore_diagnostic BEFORE INSERT ON graph_diagnostics \
@@ -254,8 +273,8 @@ fn late_write_errors_roll_back_replacement_and_registration() {
     ] {
         assert_write_error(store.save(&saved.repository_id, &payload), message);
         assert_write_error(store.save_new("Rejected", "/rejected", &payload), message);
-        assert_eq!(store.graph(&saved.repository_id).unwrap().unwrap().graph_revision, saved.graph_revision);
-        assert_eq!(store.report_facts(&saved.repository_id).unwrap().unwrap(), facts);
+        assert_eq!(store.get_architecture(&saved.repository_id).unwrap().unwrap().graph_revision, saved.graph_revision);
+        assert_eq!(store.get_report_facts(&saved.repository_id).unwrap().unwrap(), facts);
         assert_eq!(store.list().unwrap().len(), 1);
     }
 }

@@ -34,10 +34,10 @@ test('inferred service exports cannot forward factory, context, class, ORM or co
   const source = `
     import { createRepositoryContext as factory } from './persistence/repositories/factory'
     import { openConnection } from './persistence/repositories/connection'
-    import { GraphStore } from './persistence/repositories/graph-store'
+    import { RepositoryStore } from './persistence/repositories/repository-store'
     export const leakedFactory = factory
     export const leakedContext = () => factory()
-    export const leakedClass = GraphStore
+    export const leakedClass = RepositoryStore
     export const leakedConnection = () => openConnection()
     export const leakedOrm = () => openConnection().database
     export const nestedContext = () => ({ hidden: factory() })
@@ -53,11 +53,20 @@ test('inferred service exports cannot forward factory, context, class, ORM or co
     root,
   ).options
   const host = ts.createCompilerHost(options)
+  const factoryFile = join(root, 'src/lib/persistence/repositories/factory.ts')
+  const leakedFactory = `import type { RepositoryRepositoryPort } from '../../repository-ports'; export const createRepositoryContext = (): RepositoryRepositoryPort => null!`
   const original = host.getSourceFile.bind(host)
   host.getSourceFile = (...args: Parameters<typeof original>) =>
     args[0] === file
       ? ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
-      : original(...args)
+      : args[0] === factoryFile
+        ? ts.createSourceFile(
+            factoryFile,
+            leakedFactory,
+            ts.ScriptTarget.Latest,
+            true,
+          )
+        : original(...args)
   const program = ts.createProgram([file], options, host)
   const errors = auditServiceExports(program, program.getSourceFile(file)!)
   for (const name of [

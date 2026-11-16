@@ -1,17 +1,15 @@
 #[path = "writes.rs"]
 mod writes;
 
+use super::database::migrate_database;
 use super::database::run;
-use super::{
-    database::migrate_database,
-    navigation::{ProjectSelector, navigation_reader},
-    repositories::{RepositoryStore, repository_store},
+use crate::{
+    bootstrap::{navigation_reader, repository_service as repository_store},
+    domain::navigation::ProjectSelector,
+    services::repository_workflow::RepositoryWorkflow,
 };
 use crate::{
-    domain::{
-        navigation::{NavigationReader, PathRequest, TraversalRequest},
-        repositories::RepositoryProtocol,
-    },
+    domain::navigation::{NavigationReader, PathRequest, TraversalRequest},
     services::{
         navigation::NavigationService,
         navigation_source::{local_bytes, source_lines, verified_excerpt},
@@ -22,7 +20,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-fn database() -> (tempfile::TempDir, PathBuf, RepositoryStore) {
+fn database() -> (tempfile::TempDir, PathBuf, RepositoryWorkflow) {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("db.sqlite");
     migrate_database(Some(&path)).unwrap();
@@ -30,6 +28,9 @@ fn database() -> (tempfile::TempDir, PathBuf, RepositoryStore) {
     (root, path, store)
 }
 
+fn connection(path: &Path) -> sea_orm::DatabaseConnection {
+    super::database::create_engine(Some(path)).unwrap()
+}
 fn artifact(root: &Path) -> Value {
     let bytes = b"def brew():\n    return 1\n";
     std::fs::write(root.join("coffee.py"), bytes).unwrap();
@@ -51,21 +52,21 @@ fn roundtrip_normalized_rows_and_transaction_replacement() {
     assert_eq!(saved.stats.symbols, 1);
     assert_eq!(saved.stats.edges, 1);
     assert_eq!(store.resolve("COFFEE").unwrap(), Some(saved.repository_id.clone()));
-    assert!(store.register("coffee", "/different").is_err());
-    let facts = store.report_facts(&saved.repository_id).unwrap().unwrap();
+    assert!(store.register(&json!({"name":"coffee","location":"/different"})).is_err());
+    let facts = store.get_report_facts(&saved.repository_id).unwrap().unwrap();
     assert_eq!(facts["mutationCandidates"], payload["mutationCandidates"]);
     assert_eq!(facts["nodes"][1]["parameterCount"], 0);
     let mut broken = payload.clone();
     broken["nodes"][1]["parentStableKey"] = json!("missing");
     assert!(store.save(&saved.repository_id, &broken).is_err());
-    let current = store.graph(&saved.repository_id).unwrap().unwrap();
+    let current = store.get_architecture(&saved.repository_id).unwrap().unwrap();
     assert_eq!(current.graph_revision, saved.graph_revision);
-    assert_eq!(store.report_facts(&saved.repository_id).unwrap().unwrap(), facts);
+    assert_eq!(store.get_report_facts(&saved.repository_id).unwrap().unwrap(), facts);
     let empty = json!({"nodes": [], "edges": [], "diagnostics": [], "mutationCandidates": []});
     let replacement = store.save(&saved.repository_id, &empty).unwrap();
     assert_ne!(replacement.graph_revision, saved.graph_revision);
     assert_eq!(replacement.stats.nodes, 0);
-    let facts = store.report_facts(&saved.repository_id).unwrap().unwrap();
+    let facts = store.get_report_facts(&saved.repository_id).unwrap().unwrap();
     for name in ["nodes", "edges", "diagnostics", "mutationCandidates"] {
         assert_eq!(facts[name], json!([]));
     }
@@ -76,16 +77,16 @@ fn replacing_one_repository_preserves_another_repository_with_the_same_stable_ke
     let payload = artifact(temp.path());
     let first = store.save_new("Coffee", "/coffee", &payload).unwrap();
     let second = store.save_new("Tea", "/tea", &payload).unwrap();
-    let before = store.report_facts(&second.repository_id).unwrap().unwrap();
+    let before = store.get_report_facts(&second.repository_id).unwrap().unwrap();
 
     store.save(&first.repository_id, &json!({})).unwrap();
 
-    let first_facts = store.report_facts(&first.repository_id).unwrap().unwrap();
+    let first_facts = store.get_report_facts(&first.repository_id).unwrap().unwrap();
     for name in ["nodes", "edges", "diagnostics", "mutationCandidates"] {
         assert_eq!(first_facts[name], json!([]), "{name}");
     }
-    assert_eq!(store.report_facts(&second.repository_id).unwrap().unwrap(), before);
-    assert_eq!(store.graph(&second.repository_id).unwrap().unwrap().graph_revision, second.graph_revision);
+    assert_eq!(store.get_report_facts(&second.repository_id).unwrap().unwrap(), before);
+    assert_eq!(store.get_architecture(&second.repository_id).unwrap().unwrap().graph_revision, second.graph_revision);
     assert_eq!(store.list().unwrap().len(), 2);
 }
 #[test]
@@ -109,24 +110,27 @@ fn graph_save_waits_for_an_existing_writer_with_numeric_metadata() {
     assert!(matches!(early, Err(std::sync::mpsc::RecvTimeoutError::Timeout)), "{early:?}");
     let replacement = receive.recv().unwrap().unwrap();
     assert_eq!(replacement.root_name.as_deref(), Some("1.25"));
-    assert_eq!(store.graph(&replacement.repository_id).unwrap().unwrap().graph_revision, replacement.graph_revision);
+    assert_eq!(
+        store.get_architecture(&replacement.repository_id).unwrap().unwrap().graph_revision,
+        replacement.graph_revision
+    );
 }
 #[test]
 fn invalid_artifacts_preserve_saved_rows_and_do_not_register_repositories() {
     let (temp, _, mut store) = database();
     let original = artifact(temp.path());
     let saved = store.save_new("Coffee", &temp.path().to_string_lossy(), &original).unwrap();
-    let before = store.report_facts(&saved.repository_id).unwrap().unwrap();
+    let before = store.get_report_facts(&saved.repository_id).unwrap().unwrap();
     for (pointer, value) in invalid_record_shapes() {
         let mut invalid = original.clone();
         *invalid.pointer_mut(pointer).unwrap() = value;
         assert!(store.save(&saved.repository_id, &invalid).is_err(), "{pointer}: {invalid}");
         assert!(store.save_new("Invalid", "/invalid", &invalid).is_err());
         assert_eq!(
-            serde_json::to_value(store.graph(&saved.repository_id).unwrap().unwrap()).unwrap(),
+            serde_json::to_value(store.get_architecture(&saved.repository_id).unwrap().unwrap()).unwrap(),
             serde_json::to_value(&saved).unwrap()
         );
-        assert_eq!(store.report_facts(&saved.repository_id).unwrap().unwrap(), before);
+        assert_eq!(store.get_report_facts(&saved.repository_id).unwrap().unwrap(), before);
         assert_eq!(store.list().unwrap().len(), 1);
     }
 }
@@ -179,10 +183,10 @@ fn metadata_scalar_conversions_and_falsey_mapping_defaults_match_python() {
         let saved = store.save(&saved.repository_id, &payload).unwrap();
         assert_eq!(saved.root_name, None);
     }
-    let before = store.graph(&saved.repository_id).unwrap().unwrap().graph_revision;
+    let before = store.get_architecture(&saved.repository_id).unwrap().unwrap().graph_revision;
     for value in [json!(1.5), json!("bad")] {
         assert!(store.save(&saved.repository_id, &json!({"schemaVersion": value})).is_err());
-        assert_eq!(store.graph(&saved.repository_id).unwrap().unwrap().graph_revision, before);
+        assert_eq!(store.get_architecture(&saved.repository_id).unwrap().unwrap().graph_revision, before);
     }
 }
 #[test]
@@ -283,7 +287,7 @@ fn huge_source_start_lines_remain_exact_and_offsets_do_not_wrap() {
     );
     let huge = (i64::MAX as u64 + 1).into();
     assert!(service.children("file:coffee.py", 30, huge).is_err());
-    assert_eq!(store.graph(&saved.repository_id).unwrap().unwrap().graph_revision, saved.graph_revision);
+    assert_eq!(store.get_architecture(&saved.repository_id).unwrap().unwrap().graph_revision, saved.graph_revision);
 }
 #[test]
 fn read_only_navigation_does_not_create_or_migrate() {
@@ -311,7 +315,14 @@ fn read_snapshot_survives_replacement_and_rejects_writes() {
     let saved = store.save_new("Coffee", &temp.path().to_string_lossy(), &artifact(temp.path())).unwrap();
     let mut reader = navigation_reader(ProjectSelector::Name("Coffee"), None, Some(&db)).unwrap();
     let replacement = store.save(&saved.repository_id, &json!({})).unwrap();
-    assert_eq!(reader.node("brew").unwrap()["name"], "brew");
+    let detail = reader.node("brew").unwrap();
+    assert_eq!(detail["name"], "brew");
+    assert_eq!(detail["startLine"], 1);
+    assert_eq!(detail["metrics"]["parameterCount"], 0);
+    assert_eq!(detail["decorators"], json!(["one", "two"]));
+    assert_eq!(reader.file("coffee.py").unwrap().len(), 1);
+    assert_eq!(reader.diagnostics(&["coffee.py".into()], 31).unwrap()[0]["message"], "one");
+    assert_eq!(reader.overview().unwrap()["relations"], json!([{"type":"CALLS","count":1}]));
     assert_eq!(reader.snapshot().revision, saved.graph_revision);
     let mut current = navigation_reader(ProjectSelector::Name("Coffee"), None, Some(&db)).unwrap();
     assert_eq!(current.snapshot().revision, replacement.graph_revision);
@@ -323,9 +334,9 @@ fn read_snapshot_survives_replacement_and_rejects_writes() {
 #[test]
 fn repository_order_and_literal_case_insensitive_lookup_are_preserved() {
     let (temp, db, mut store) = database();
-    let first = store.register("Coffee'_%", "/one").unwrap();
-    let second = store.register("Tea", "/two").unwrap();
-    run(store.connection.execute_unprepared("UPDATE repositories SET created_at=1")).unwrap();
+    let first = store.register(&json!({"name":"Coffee'_%","location":"/one"})).unwrap();
+    let second = store.register(&json!({"name":"Tea","location":"/two"})).unwrap();
+    run(connection(&db).execute_unprepared("UPDATE repositories SET created_at=1")).unwrap();
     let mut expected = vec![first.id.clone(), second.id];
     expected.sort();
     assert_eq!(store.list().unwrap().into_iter().map(|r| r.id).collect::<Vec<_>>(), expected);
@@ -351,7 +362,7 @@ fn migrations_upgrade_legacy_revision_without_backfilling() {
     drop(connection);
     migrate_database(Some(&db)).unwrap();
     let mut store = repository_store(Some(&db)).unwrap();
-    assert!(store.graph("id").unwrap().is_none());
+    assert!(store.get_architecture("id").unwrap().is_none());
     assert_eq!(store.list().unwrap()[0].imported_at, None);
 }
 #[test]
@@ -372,6 +383,41 @@ fn migration_schema_sql_matches_python_exactly() {
         serde_json::from_str(include_str!("../../../src/matis/persistence/migrations/schema.json")).unwrap();
     assert_eq!(actual, expected);
 }
+#[test]
+fn candidate_reads_skip_report_facts_and_require_a_revisioned_graph() -> anyhow::Result<()> {
+    use crate::domain::repositories::RepositoryError;
+    let (temp, db, mut store) = database();
+    let graph = artifact(temp.path());
+    let saved = store.save_new("Coffee", &temp.path().to_string_lossy(), &graph)?;
+    let id = &saved.repository_id;
+    assert_eq!(json!(store.saved_folder_candidates(temp.path())?), graph["mutationCandidates"]);
+    let unindexed = store.register(&json!({"name":"Unindexed","location":"/unindexed"}))?;
+    assert_eq!(store.get_report_facts(&unindexed.id)?, None);
+
+    // Candidate reads must work even when unrelated report storage cannot be read.
+    let connection = connection(&db);
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(connection.execute_unprepared("DROP TABLE graph_node_metrics"))?;
+    assert!(store.get_report_facts(id).is_err());
+    assert_eq!(json!(store.saved_folder_candidates(temp.path())?), graph["mutationCandidates"]);
+    runtime.block_on(connection.execute_unprepared("UPDATE graph_mutation_candidates SET payload = 'invalid JSON'"))?;
+    let error = store.saved_folder_candidates(temp.path()).unwrap_err();
+    assert_eq!(error.downcast_ref::<RepositoryError>().unwrap().status, 500);
+
+    runtime.block_on(connection.execute_unprepared("UPDATE repository_graphs SET graph_revision = NULL"))?;
+    assert_eq!(
+        store.saved_folder_candidates(temp.path()).unwrap_err().downcast_ref::<RepositoryError>().unwrap().status,
+        409
+    );
+    assert_eq!(store.get_report_facts(id)?, None);
+    let mut service = repository_store(Some(&db))?;
+    assert_eq!(
+        service.saved_folder_candidates(temp.path()).unwrap_err().downcast_ref::<RepositoryError>().unwrap().status,
+        409
+    );
+    Ok(())
+}
+
 #[test]
 fn source_limits_encoding_and_containment() {
     let temp = tempfile::tempdir().unwrap();

@@ -15,7 +15,7 @@ export const defaultDatabasePath = () =>
     'matis/matis.sqlite',
   )
 
-/** Infrastructure only: Python creates/migrates the file; never create a UI schema. */
+/** Infrastructure only: Rust creates/migrates the file; never create a UI schema. */
 export function openConnection(path = defaultDatabasePath()) {
   const driver = new Database(resolve(path), {
     readwrite: true,
