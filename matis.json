@@ -99,7 +99,7 @@
       "navigation-services": {
         "sources": ["matis-rust/src/matis/services/navigation*.rs"],
         "cwd": "matis-rust",
-        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--", "--skip", "integration_tests"],
+        "command": ["cargo", "test", "--locked", "--lib", "--test", "unit", "--test", "integration"],
         "timeoutSeconds": 300
       },
       "mutations": {

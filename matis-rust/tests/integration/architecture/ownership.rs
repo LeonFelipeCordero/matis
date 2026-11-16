@@ -131,8 +131,12 @@ fn assert_repository_owner(file: &Path, source: &str, &(_, repository, _, _): &O
 }
 fn assert_source_ownership(file: &Path, source: &str) {
     OWNERS.iter().for_each(|owner| assert_table_owner(file, source, owner));
-    if file.starts_with("persistence") && file != Path::new("persistence/mod.rs") {
-        OWNERS.iter().for_each(|owner| assert_repository_owner(file, source, owner));
+    if file.starts_with("persistence") {
+        let references = super::boundary_references(source, &["services", "bootstrap"]);
+        assert!(references.is_empty(), "{} depends on application services: {references:?}", file.display());
+        if file != Path::new("persistence/mod.rs") {
+            OWNERS.iter().for_each(|owner| assert_repository_owner(file, source, owner));
+        }
     }
 }
 #[test]
@@ -207,7 +211,10 @@ fn visit(name: &str, edges: &BTreeMap<String, BTreeSet<String>>, visits: &mut Vi
 fn declared_names(source: &str) -> BTreeSet<String> {
     let tree = rust_tree(source);
     matis::syntax::walk(tree.root_node())
-        .filter(|n| matches!(n.kind(), "struct_item" | "enum_item" | "trait_item" | "type_item"))
+        .filter(|n| {
+            matches!(n.kind(), "struct_item" | "enum_item" | "trait_item" | "type_item")
+                || n.kind() == "function_item" && n.parent().is_some_and(|parent| parent.kind() == "source_file")
+        })
         .map(|n| n.child_by_field_name("name").unwrap().utf8_text(source.as_bytes()).unwrap().to_owned())
         .collect()
 }
@@ -233,6 +240,19 @@ fn service_dependencies_are_acyclic() {
         .collect();
     let mut visits = Visits::default();
     edges.keys().for_each(|name| visit(name, &edges, &mut visits));
+}
+#[test]
+fn repositories_cannot_depend_on_services_or_bootstrap() {
+    for source in [
+        "use crate::{services::{nodes::NodeService}, domain};",
+        "pub use crate::services::nodes as capability;",
+        "fn bypass() { crate::bootstrap::repository_service(None); }",
+    ] {
+        assert!(
+            std::panic::catch_unwind(|| assert_source_ownership(Path::new("persistence/nodes.rs"), source)).is_err(),
+            "{source}"
+        );
+    }
 }
 #[test]
 fn repository_reference_checks_each_grouped_path_without_aliases() {

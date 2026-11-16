@@ -312,6 +312,10 @@ test('normalized-only DTOs preserve partial metrics, symbol details, ordered dia
   })
   const id = save(artifact)
   const other = fixture()
+  other.nodes.find((node) => node.stableKey === 'a.py')!.properties = {
+    bytes: 999,
+    sha256: 'other-repository-digest',
+  }
   other.nodes.find((node) => node.stableKey === 'run')!.name =
     'other-repository'
   const otherId = save(other, 'other')
@@ -327,6 +331,10 @@ test('normalized-only DTOs preserve partial metrics, symbol details, ordered dia
     { source: 'run', target: 'b.py', count: 2, relationships: { CALLS: 2 } },
   ])
   expectPartialDetails(view)
+  expect(
+    ready(otherId).details.nodes.find((node) => node.stableKey === 'a.py')!
+      .properties,
+  ).toMatchObject({ bytes: 999, sha256: 'other-repository-digest' })
   expect(view.diagnostics).toEqual(artifact.diagnostics ?? [])
   expect(
     ready(otherId, { kind: 'file', key: 'a.py' }).graph.nodes[0].label,
@@ -482,6 +490,21 @@ test('ORM key batches preserve large scoped details, decorators, edge order and 
     }))
   artifact.edges.push(...edges)
   const id = save(artifact)
+  const expectedImports = new Map<string, number | null>()
+  const insertRepository = database.prepare(
+    'INSERT INTO repositories (id, name, location, created_at) VALUES (?, ?, ?, ?)',
+  )
+  const insertRevision = database.prepare(
+    'INSERT INTO repository_graphs (repository_id, imported_at, graph_revision) VALUES (?, ?, ?)',
+  )
+  database.transaction(() => {
+    for (let index = 0; index < 500; index++) {
+      const key = `listed:${index}`
+      insertRepository.run(key, key, '/fixture', index)
+      insertRevision.run(key, index + 100, index % 2 ? 'revision' : null)
+      expectedImports.set(key, index % 2 ? index + 100 : null)
+    }
+  })()
   const statements: Array<string> = []
   const original = Database.prototype.prepare
   const reads = spyOn(Database.prototype, 'prepare').mockImplementation(
@@ -492,6 +515,15 @@ test('ORM key batches preserve large scoped details, decorators, edge order and 
   )
   let view: GraphView
   try {
+    const listed = service.listRepositories()
+    expect(listed.map((row) => row.id)).toEqual([...expectedImports.keys(), id])
+    for (const row of listed.filter((entry) => entry.id !== id))
+      expect(row.importedAt).toBe(expectedImports.get(row.id)!)
+    expect(statements.length).toBeLessThanOrEqual(4)
+    expect(
+      Math.max(...statements.map((sql) => sql.match(/\?/g)?.length ?? 0)),
+    ).toBeLessThanOrEqual(500)
+    statements.length = 0
     view = ready(id, { kind: 'file', key: 'a.py' })
   } finally {
     reads.mockRestore()

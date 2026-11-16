@@ -1,5 +1,5 @@
 import ts from 'typescript-ast'
-import { factory } from './database-policy'
+import { factory, repositoryRoot } from './database-policy'
 import { permittedPorts, repositoryPort } from './database-ownership-policy'
 
 function applicationDeclaration(node: ts.Node) {
@@ -38,9 +38,28 @@ function dependencyBinding(node: ts.Node) {
   )
 }
 
+function storageOwner(file: string) {
+  return (
+    file.includes(repositoryRoot) ||
+    /node_modules\/(?:drizzle-orm|bun-types\/sqlite)/.test(file)
+  )
+}
+
+function rawStorageDeclaration(node: ts.Node) {
+  return (
+    (ts.isClassDeclaration(node) ||
+      ts.isInterfaceDeclaration(node) ||
+      (ts.isTypeAliasDeclaration(node) && node.name.text === 'AppDatabase')) &&
+    /(?:persistence\/repositories\/connection\.ts|node_modules\/(?:drizzle-orm|bun-types\/sqlite))/.test(
+      node.getSourceFile().fileName,
+    )
+  )
+}
+
 function dependencyInspector(
   checker: ts.TypeChecker,
   allowed = new Set<string>(),
+  storageAllowed = false,
 ) {
   const inspect = (type: ts.Type, seen = new Set<ts.Type>()): boolean => {
     if (
@@ -53,6 +72,7 @@ function dependencyInspector(
       ...(type.getSymbol()?.declarations ?? []),
       ...(type.aliasSymbol?.declarations ?? []),
     ]
+    if (!storageAllowed && declarations.some(rawStorageDeclaration)) return true
     const port = declarations.find((node) =>
       /(?:^|\/)repository-ports\.ts$/.test(node.getSourceFile().fileName),
     )
@@ -196,6 +216,7 @@ export function auditRepositoryDependencies(
   const containsDependency = dependencyInspector(
     checker,
     permittedPorts(normalized),
+    storageOwner(normalized),
   )
   const errors: Array<string> = []
   const report = (node: ts.Node, message: string) =>
@@ -215,7 +236,11 @@ export function auditRepositoryDependencies(
           .fileName ?? ''
       const inspect = valueInspector(
         checker,
-        dependencyInspector(checker, permittedPorts(target)),
+        dependencyInspector(
+          checker,
+          permittedPorts(target),
+          storageOwner(target),
+        ),
         source,
       )
       if (node.arguments?.some((argument) => inspect(argument)))
@@ -228,9 +253,11 @@ export function auditRepositoryDependencies(
         ts.isCallExpression(node) &&
         (ts.isPropertyAccessExpression(node.expression) ||
           ts.isElementAccessExpression(node.expression)) &&
-        dependencyInspector(checker)(
-          checker.getTypeAtLocation(node.expression.expression),
-        )
+        dependencyInspector(
+          checker,
+          new Set(),
+          true,
+        )(checker.getTypeAtLocation(node.expression.expression))
       )
         report(node, 'composition may construct repositories, not call them')
     }

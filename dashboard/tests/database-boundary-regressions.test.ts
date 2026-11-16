@@ -253,6 +253,30 @@ test('composition may inject repositories but cannot call their operations', () 
   ).toBe(true)
 })
 
+test('composition cannot forward raw database handles to application helpers', () => {
+  for (const setup of [
+    'const value = openConnection().database',
+    'const value: unknown = openConnection().database',
+    'const value = { hidden: openConnection().database }',
+  ]) {
+    const errors = dependencyErrors({
+      [`${repositoryRoot}factory.ts`]: `
+        import { openConnection } from './connection'
+        import { outside } from '../../../boundary-helper'
+        export function createRepositoryContext() {
+          ${setup}
+          return outside(value)
+        }
+      `,
+      'src/boundary-helper.ts':
+        'export function outside(value: unknown) { return value }',
+    })
+    expect(errors.some((error) => error.includes('delegated outside'))).toBe(
+      true,
+    )
+  }
+})
+
 test(
   'all production sources enforce typed repository dependency ownership',
   () => {

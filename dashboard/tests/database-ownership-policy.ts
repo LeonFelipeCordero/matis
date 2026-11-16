@@ -83,6 +83,12 @@ export function checkTableOwnership(
   resolved: string,
   report: Reporter,
 ) {
+  if (
+    file.startsWith(repositoryRoot) &&
+    file !== `${factory}.ts` &&
+    resolved.startsWith(serviceRoot)
+  )
+    report(node, 'repository cannot depend on a capability service')
   if (resolved === `${repositoryRoot}schema`) {
     const names = namedImports(node)
     if (

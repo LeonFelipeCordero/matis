@@ -9,8 +9,8 @@ coverage without analyzing files or opening SQLite.
 Only phase-one candidates are persisted, in `graph_mutation_candidates`. Manifests
 are derived data: no mutation tables, sessions, ledger or extra persistence lifecycle.
 Disabling a rule does not remove candidates. The report API is
-`matis.mutations.report.build_mutation_report(root, report, config)`, accepting either
-`build_artifact_report(...)` or `RepositoryService.report(...)` output.
+`matis::mutations::report::build_mutation_report(root, report, config)`, accepting either
+`build_artifact_report(...)` or `RepositoryWorkflow::report(...)` output.
 
 ## Configuration
 

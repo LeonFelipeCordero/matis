@@ -39,6 +39,48 @@ test('all dashboard production follows service -> repository -> ORM, including b
   ).toEqual([])
 })
 
+test('table repositories cannot depend on capability services', () => {
+  for (const source of [
+    "import { NodeService } from '../../services/node-service'",
+    "export { NodeService } from '@/lib/services/node-service'",
+    "const service = await import('@/lib/services/node-service')",
+  ])
+    expect(
+      auditSource(`${repositoryRoot}node-repository.ts`, source).length,
+    ).toBeGreaterThan(0)
+})
+
+test('service dependencies are acyclic', () => {
+  const config = ts.readConfigFile(join(root, 'tsconfig.json'), ts.sys.readFile)
+  const { options } = ts.parseJsonConfigFileContent(config.config, ts.sys, root)
+  const files = productionFiles(join(root, 'src/lib/services'))
+  const edges = new Map(
+    files.map((file) => [
+      file,
+      ts
+        .preProcessFile(readFileSync(file, 'utf8'), true)
+        .importedFiles.map(
+          ({ fileName }) =>
+            ts.resolveModuleName(fileName, file, options, ts.sys).resolvedModule
+              ?.resolvedFileName,
+        )
+        .filter((target): target is string => target !== undefined),
+    ]),
+  )
+  const active = new Set<string>()
+  const complete = new Set<string>()
+  const visit = (file: string) => {
+    if (complete.has(file)) return
+    expect(active.has(file), `Cyclic service dependency at ${file}`).toBe(false)
+    active.add(file)
+    for (const target of edges.get(file) ?? [])
+      if (edges.has(target)) visit(target)
+    active.delete(file)
+    complete.add(file)
+  }
+  files.forEach(visit)
+})
+
 test('each table and port permits only its exact owner, including aliases and relative paths', () => {
   for (const [table, repository, port, owner] of ownership) {
     const repositoryFile = `${repositoryRoot}${repository}.ts`
