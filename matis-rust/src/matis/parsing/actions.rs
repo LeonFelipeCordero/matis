@@ -11,6 +11,10 @@ use std::{
 };
 use tree_sitter::Node;
 
+#[cfg(test)]
+#[path = "../../../tests/unit/parsing/actions_tests.rs"]
+mod tests;
+
 pub(crate) struct Action {
     pub name: String,
     pub qualified: Option<String>,
@@ -141,6 +145,7 @@ fn java_imports(root: Node<'_>, source: &[u8]) -> JavaImports {
     }
     if !imports.types.is_empty() {
         add_java_shadows(root, source, &mut imports);
+        add_java_receiver_shadows(root, source, &mut imports);
     }
     imports
 }
@@ -247,4 +252,22 @@ fn java_qualified(node: Node<'_>, name: &str, imports: &JavaImports) -> Option<S
     }
     let imported = imports.types.get(head)?;
     Some(if tail.is_empty() { imported.clone() } else { format!("{imported}.{tail}") })
+}
+
+fn add_java_receiver_shadows(root: Node<'_>, source: &[u8], imports: &mut JavaImports) {
+    let query = include_str!("queries/action_shadows/java.scm");
+    for binding in queries::selected_nodes((root, source), query, "binding") {
+        let name = text(Some(binding), source);
+        if !imports.types.contains_key(&name) {
+            continue;
+        }
+        let Some(container) = binding.parent().and_then(|node| node.parent()) else { continue };
+        let scope = match container.kind() {
+            "enum_body" => Some(container),
+            _ => container.parent().and_then(|statement| field(statement, &["consequence"])),
+        };
+        if let Some(scope) = scope {
+            imports.shadows.entry(name).or_default().push(JavaShadow { range: scope.byte_range(), value: true });
+        }
+    }
 }
