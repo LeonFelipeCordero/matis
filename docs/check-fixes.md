@@ -52,6 +52,41 @@ Review outgoing dependencies. Separate unrelated responsibilities and depend on 
 
 Read the diagnostic and fix the syntax or unsupported construct at the reported path. Run the check again. Missing measurements do not mean that the code passed.
 
+## forbiddenCalls
+
+Use `forbiddenCalls` in the project-root `matis.json` to reject specific call names in selected source files. For example:
+
+```json
+{
+  "forbiddenCalls": [
+    {
+      "files": ["ui/**"],
+      "calls": ["useEffect", "React.useEffect"],
+      "message": "Derive state during render when no external system is involved."
+    },
+    {
+      "files": ["tests/**", "**/*.test.ts"],
+      "calls": ["setTimeout", "window.setTimeout"],
+      "message": "Use fake timers or wait for the expected condition."
+    }
+  ],
+  "forbiddenConstructors": [
+    {
+      "files": ["src/test/**/*.java"],
+      "types": ["com.ph.connection.AllowConnection"]
+    }
+  ]
+}
+```
+
+The `files` entries are case-sensitive, project-relative POSIX globs. `*` stays within one path component and `**` crosses zero or more components. A file must match at least one glob. Ignored files stay ignored. `message` is optional. Omit a rule list or use `[]` to disable it. `matis check` reports violations with the call-site file and line and exits with status `1` when findings exist.
+
+Call rules work in Python, JavaScript, JSX, TypeScript, TSX, Java, Kotlin, Go, Rust, and Elixir. Names are exact and case-sensitive. List the bare and qualified spellings separately if you want both. Java additionally matches direct qualified spellings and explicit imports (for example, `com.ph.connection.AllowConnection.open`). Matis does not infer receiver types or follow aliases, wildcard imports, or dynamic calls.
+
+## forbiddenConstructors
+
+Use `forbiddenConstructors` to check explicit `new` expressions in Java, JavaScript, JSX, TypeScript, and TSX. In Java, `new AllowConnection()` matches the fully qualified rule above when an explicit import identifies the class. An import or a constructor reference alone is not a violation. In languages with call-like construction syntax (such as Python and Kotlin), use `forbiddenCalls` for the written name instead.
+
 ## Use your own guide
 
 Add `helpLinks` to the project's `matis.json`. Keys are rule names from the headings above, including `analysis`. Values must be HTTP or HTTPS links without whitespace, angle brackets, or backslashes. Omitted rules keep the default guide. Links appear as `helpUrl` in JSON and as `How to fix` in Markdown. Matis prints links; it does not fetch them. Clickable IPv6 links in Markdown require a renderer that supports inline HTML.

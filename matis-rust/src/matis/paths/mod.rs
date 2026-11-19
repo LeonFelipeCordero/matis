@@ -1,4 +1,5 @@
 //! Native equivalents of Python's shared path expansion and resolution operations.
+pub(crate) mod globs;
 mod home;
 
 use anyhow::Result;

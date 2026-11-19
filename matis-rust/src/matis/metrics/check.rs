@@ -150,7 +150,14 @@ fn cycle_paths(group: &Value) -> Result<Vec<String>> {
 /// # Errors
 /// Reject invalid settings, malformed report arrays, or nonnumeric checked metrics.
 pub fn build_check(report: &Value, config: &Value) -> Result<Value> {
+    build_check_with(report, config, None)
+}
+
+pub(crate) fn build_check_with(report: &Value, config: &Value, source_findings: Option<Vec<Value>>) -> Result<Value> {
     let config = validate_config(config)?;
+    if source_findings.is_none() && super::forbidden::enabled(&config) {
+        anyhow::bail!("Forbidden action rules require source analysis");
+    }
     let patterns: Vec<_> =
         config["fanExclude"].as_array().unwrap().iter().map(|pattern| pattern.as_str().unwrap()).collect();
     let fan_exclude = IgnoreSpec::new(&patterns.join("\n"))?;
@@ -165,6 +172,7 @@ pub fn build_check(report: &Value, config: &Value) -> Result<Value> {
         findings.push(json!({"rule": "analysis", "metric": "parseError", "subject": "Analysis incomplete",
             "files": [{"path": diagnostic["path"]}], "actual": null, "limit": null, "details": [diagnostic["message"]]}));
     }
+    findings.extend(source_findings.into_iter().flatten());
     for finding in &mut findings {
         let rule = finding["rule"].as_str().unwrap();
         finding["helpUrl"] = config["helpLinks"][rule].as_str().map_or_else(
