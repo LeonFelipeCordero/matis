@@ -35,16 +35,30 @@ Put overrides in `matis.json` at the root of the folder you analyze. Omitted lim
 
 Size and complexity limits apply to files or functions and methods as shown by the check name or finding. Fan limits apply only to files. Change impact and instability checks apply to files and modules. Dependency metrics include tests and type-only dependencies.
 
-For an existing project, fix a few important findings first. If a strict limit would block adoption, set a limit the team can meet now and lower it as you improve the code. Use `fanExclude` for an intentional fan-in or fan-out exception, not to hide code from analysis:
+### Example: configure every limit
+
+Copy the keys you need into your root `matis.json`. These values are examples, not recommended limits for every project.
 
 ```json
 {
   "maxFileLines": 800,
+  "maxFunctionLines": 100,
+  "maxParameters": 4,
+  "maxWeightedComplexity": 10,
+  "maxDecisionDepth": 3,
+  "maxNestedLoops": 1,
+  "maxCircularImportGroups": 0,
+  "maxFanIn": 25,
+  "maxFanOut": 15,
+  "maxChangeImpact": 40,
+  "maxInstability": 0.85,
   "fanExclude": ["/src/shared/contracts.ts"]
 }
 ```
 
-`fanExclude` uses Git-style patterns and does not change dependency counts or other checks. Use `.matisignore` for files you intentionally want to remove from analysis, such as generated code.
+This example allows up to one nested loop per function or method, rejects any runtime import cycle, and enables change-impact and instability checks. To disable just the fan-out limit, use `"maxFanOut": null`. All limits take nonnegative integers except `maxInstability`, which takes a number from 0 to 1.
+
+For an existing project, fix a few important findings first. If a strict limit would block adoption, set a limit the team can meet now and lower it as you improve the code. Use `fanExclude` for intentional fan-in and fan-out exceptions. It uses Git-style patterns and does not change dependency counts or other checks. Use `.matisignore` to remove files from analysis, such as generated code.
 
 ## 3. Enforce architecture and coding rules
 
@@ -80,7 +94,20 @@ Add only the rules your project needs. These three lists are disabled when omitt
 - **`forbiddenCalls`** checks call names in selected files. List bare and qualified spellings separately when you want both. It does not infer receiver types or resolve dynamic calls.
 - **`forbiddenConstructors`** checks explicit `new` expressions in Java, JavaScript, JSX, TypeScript, and TSX. In Java, an explicit import can identify the fully qualified type. An import alone is not a constructor violation.
 
-The path globs are case-sensitive and relative to the project root. `**` matches zero or more path components. Ignored files stay ignored. Messages are optional. See the [check guide](check-fixes.md) for language details and how to use `helpLinks` to point findings to your team's standards.
+The path globs are case-sensitive and relative to the project root. `**` matches zero or more path components. Ignored files stay ignored. Messages are optional. See the [check guide](check-fixes.md) for language details.
+
+### Example: link findings to your team's guidance
+
+The `analysis` check runs automatically; there is no limit to set. Use `helpLinks` to change the guidance link for it or for any other check. This changes the links, not what Matis checks.
+
+```json
+{
+  "helpLinks": {
+    "analysis": "https://example.com/team/fix-analysis-errors",
+    "forbiddenDependencies": "https://example.com/team/dependency-rules"
+  }
+}
+```
 
 ## 4. Make it part of code review
 
