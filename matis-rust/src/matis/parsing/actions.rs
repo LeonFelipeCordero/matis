@@ -1,10 +1,14 @@
 //! Call-site spellings for source policy, independent of graph target inference.
 use super::{
     adapters::LanguageAdapter,
+    queries,
     syntax::{CallSite, ParsedSyntax, callee_node},
 };
 use crate::syntax::{children, field, named_children, text, walk};
-use std::{collections::HashMap, ops::Range};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Range,
+};
 use tree_sitter::Node;
 
 pub(crate) struct Action {
@@ -18,9 +22,20 @@ pub(crate) fn visit(syntax: &ParsedSyntax<'_>, mut observe: impl FnMut(Action)) 
     let source = &syntax.source.source;
     let adapter = LanguageAdapter { language: &syntax.source.language };
     let java = (adapter.language == "java").then(|| java_imports(syntax.root, source));
+    let noncalls: HashSet<_> = if adapter.language == "elixir" {
+        queries::selected_nodes((syntax.root, source), include_str!("queries/actions/elixir-noncalls.scm"), "noncall")
+            .into_iter()
+            .collect()
+    } else {
+        HashSet::new()
+    };
     let newlines: Vec<_> = source.iter().enumerate().filter_map(|(i, byte)| (*byte == b'\n').then_some(i)).collect();
     adapter.visit_calls(syntax.root, source, &mut |site, bytes| {
-        if adapter.call_relationship(&site) != "CALLS" || site.node.has_error() {
+        if adapter.call_relationship(&site) != "CALLS"
+            || site.node.has_error()
+            || !noncalls.is_empty()
+                && std::iter::successors(Some(site.node), Node::parent).any(|node| noncalls.contains(&node))
+        {
             return;
         }
         let Some(name) = spelling(&site, bytes) else { return };
@@ -148,7 +163,11 @@ fn java_declaration(node: Node<'_>) -> Option<(Node<'_>, bool)> {
         | "enum_declaration"
         | "record_declaration"
         | "annotation_type_declaration" => false,
-        "variable_declarator" | "formal_parameter" | "catch_formal_parameter" | "enhanced_for_statement" => true,
+        "variable_declarator"
+        | "formal_parameter"
+        | "catch_formal_parameter"
+        | "enhanced_for_statement"
+        | "resource" => true,
         "identifier" if inferred_java_parameter(node) => return Some((node, true)),
         _ => return None,
     };
@@ -180,6 +199,7 @@ fn java_scope(node: Node<'_>, declaration: Node<'_>) -> Range<usize> {
                 | "catch_clause"
                 | "method_declaration"
                 | "constructor_declaration"
+                | "record_declaration"
                 | "class_body"
                 | "interface_body"
                 | "enum_body"
@@ -189,6 +209,11 @@ fn java_scope(node: Node<'_>, declaration: Node<'_>) -> Range<usize> {
     }) else {
         return node.byte_range();
     };
+    if scope.kind() == "try_with_resources_statement"
+        && let Some(body) = field(scope, &["body"])
+    {
+        return declaration.start_byte()..body.end_byte();
+    }
     let start = match scope.kind() {
         "block" | "constructor_body" | "switch_block" | "for_statement" | "try_with_resources_statement" => {
             declaration.start_byte()

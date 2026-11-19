@@ -142,6 +142,71 @@ fn invalid_policy_is_rejected_before_analysis() {
     assert!(diagnostic.contains("single-line"), "{diagnostic}");
 }
 
+#[test]
+fn elixir_policy_distinguishes_calls_from_specs_and_captures() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("timer.ex"),
+        concat!(
+            "defmodule Timer do\n",
+            "  @spec tick(integer()) :: atom()\n",
+            "  def tick(n), do: n\n",
+            "  @callback tick(integer()) :: atom()\n",
+            "  @type duration :: integer()\n",
+            "  def run do\n",
+            "    ref = &Timer.tick/1\n",
+            "    fun = &Timer.tick(&1)\n",
+            "    tick(1)\n",
+            "  end\n",
+            "end\n",
+        ),
+    )
+    .unwrap();
+    write_config(
+        root.path(),
+        json!({"forbiddenCalls": [{"files": ["*.ex"], "calls": ["tick", "Timer.tick", "integer", "atom"]}]}),
+    );
+    let check = run(root.path(), "json");
+    assert_eq!(check.status.code(), Some(1));
+    let findings: Vec<_> = source_findings(&check.stdout)
+        .into_iter()
+        .map(|item| (item["subject"].clone(), item["files"][0].clone()))
+        .collect();
+    assert_eq!(
+        findings,
+        [
+            (json!("Timer.tick"), json!({"path": "timer.ex", "line": 8})),
+            (json!("tick"), json!({"path": "timer.ex", "line": 9}))
+        ]
+    );
+}
+
+#[test]
+fn java_record_and_resource_shadows_do_not_hide_imports_outside_their_scope() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("Timer.java"),
+        concat!(
+            "import demo.Clock;\n",
+            "record Timer(Safe Clock) { void run() { Clock.tick(); } }\n",
+            "class Later {\n",
+            "  void run() throws Exception {\n",
+            "    try (Safe Clock = acquire()) { Clock.tick(); }\n",
+            "    Clock.tick();\n",
+            "  }\n",
+            "  Safe acquire() { return null; }\n",
+            "}\n",
+        ),
+    )
+    .unwrap();
+    write_config(root.path(), json!({"forbiddenCalls": [{"files": ["*.java"], "calls": ["demo.Clock.tick"]}]}));
+    let check = run(root.path(), "json");
+    assert_eq!(check.status.code(), Some(1));
+    let findings = source_findings(&check.stdout);
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0]["files"], json!([{"path": "Timer.java", "line": 6}]));
+}
+
 fn write_config(root: &Path, mut config: Value) {
     for limit in matis::metrics::config::LIMITS {
         config[limit] = Value::Null;
