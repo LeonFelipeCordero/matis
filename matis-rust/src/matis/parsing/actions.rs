@@ -254,8 +254,7 @@ fn java_qualified(node: Node<'_>, name: &str, imports: &JavaImports) -> Option<S
         return None;
     }
     // `outer.new Inner()` names a member of the outer expression, not an imported type.
-    if constructor
-        && !children(node).into_iter().find(|part| !is_comment(*part)).is_some_and(|part| part.kind() == "new")
+    if constructor && children(node).into_iter().find(|part| !is_comment(*part)).is_none_or(|part| part.kind() != "new")
     {
         return None;
     }

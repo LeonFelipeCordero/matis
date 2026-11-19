@@ -1,4 +1,5 @@
 use super::{
+    architecture,
     config::{integer_text, validate_config},
     forbidden,
     report_markdown::{code, location, metric_label, value_text},
@@ -149,16 +150,21 @@ fn cycle_paths(group: &Value) -> Result<Vec<String>> {
 /// Null limits disable checks; unavailable enabled metrics and parse diagnostics become findings.
 ///
 /// # Errors
-/// Reject invalid settings, source rules without source analysis, malformed report arrays,
+/// Reject invalid settings, rules that need source or graph analysis, malformed report arrays,
 /// or nonnumeric checked metrics.
 pub fn build_check(report: &Value, config: &Value) -> Result<Value> {
     build_check_with(report, config, None)
 }
 
-pub(crate) fn build_check_with(report: &Value, config: &Value, source_findings: Option<Vec<Value>>) -> Result<Value> {
+pub(crate) fn build_check_with(
+    report: &Value,
+    config: &Value,
+    analysis: Option<(&Value, Vec<Value>)>,
+) -> Result<Value> {
     let config = validate_config(config)?;
-    if source_findings.is_none() && forbidden::enabled(&config) {
-        anyhow::bail!("Forbidden action rules require source analysis");
+    if analysis.is_none() {
+        anyhow::ensure!(!forbidden::enabled(&config), "Forbidden action rules require source analysis");
+        anyhow::ensure!(config[architecture::RULE] == json!([]), "Forbidden dependency rules require graph analysis");
     }
     let patterns: Vec<_> =
         config["fanExclude"].as_array().unwrap().iter().map(|pattern| pattern.as_str().unwrap()).collect();
@@ -174,7 +180,10 @@ pub(crate) fn build_check_with(report: &Value, config: &Value, source_findings: 
         findings.push(json!({"rule": "analysis", "metric": "parseError", "subject": "Analysis incomplete",
             "files": [{"path": diagnostic["path"]}], "actual": null, "limit": null, "details": [diagnostic["message"]]}));
     }
-    findings.extend(source_findings.into_iter().flatten());
+    if let Some((artifact, source_findings)) = analysis {
+        findings.extend(source_findings);
+        findings.extend(architecture::findings(&config, artifact));
+    }
     for finding in &mut findings {
         let rule = finding["rule"].as_str().unwrap();
         finding["helpUrl"] = config["helpLinks"][rule].as_str().map_or_else(
@@ -201,10 +210,11 @@ fn finding_section(finding: &Value) -> String {
         rows.push(format!("- {}", code(&location(file))));
     }
     rows.push(String::new());
-    let source_rule = forbidden::RULES.iter().any(|(rule, _)| finding["rule"] == *rule);
+    let custom_message =
+        finding["rule"] == architecture::RULE || forbidden::RULES.iter().any(|(rule, _)| finding["rule"] == *rule);
     for detail in finding["details"].as_array().into_iter().flatten() {
         let detail = detail.as_str().unwrap_or("");
-        if source_rule {
+        if custom_message {
             rows.push(format!("- {}", literal_markdown(detail)));
         } else {
             rows.push(format!("- {detail}"));

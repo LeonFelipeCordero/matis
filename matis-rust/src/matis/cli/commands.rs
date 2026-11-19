@@ -90,7 +90,8 @@ fn standard_command(command: &str, matches: &clap::ArgMatches) -> Result<i32> {
     if command == "report" {
         return print_report(&report, format);
     }
-    let check = crate::metrics::check::build_check_with(&report, config.as_ref().unwrap(), Some(source_findings))?;
+    let check =
+        crate::metrics::check::build_check_with(&report, config.as_ref().unwrap(), Some((&artifact, source_findings)))?;
     print_check(&check, format)
 }
 fn print_report(report: &serde_json::Value, format: &str) -> Result<i32> {

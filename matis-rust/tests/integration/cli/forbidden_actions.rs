@@ -250,6 +250,46 @@ fn java_record_and_resource_shadows_do_not_hide_imports_outside_their_scope() {
     assert_eq!(findings[0]["files"], json!([{"path": "Timer.java", "line": 6}]));
 }
 
+#[test]
+fn architecture_policy_rejects_direct_dependencies_but_allows_indirect_dependencies() {
+    let root = tempfile::tempdir().unwrap();
+    for directory in ["ui", "service", "storage"] {
+        fs::create_dir(root.path().join(directory)).unwrap();
+    }
+    let ui = root.path().join("ui/page.ts");
+    let allowed = "import { read } from '../service/reader';\nexport const result = read();\n";
+    fs::write(&ui, allowed).unwrap();
+    fs::write(
+        root.path().join("service/reader.ts"),
+        "import type { Record } from '../storage/model';\nexport function read(): Record { return { id: 1 }; }\n",
+    )
+    .unwrap();
+    fs::write(root.path().join("storage/model.ts"), "export interface Record { id: number }\n").unwrap();
+    write_config(
+        root.path(),
+        json!({"forbiddenDependencies": [{
+            "from": ["ui/**"], "to": ["storage/model.ts"], "message": "Use the service interface."
+        }]}),
+    );
+
+    let check = run(root.path(), "json");
+    assert_eq!(check.status.code(), Some(0));
+    assert!(source_findings(&check.stdout).is_empty());
+
+    fs::write(
+        &ui,
+        format!("{allowed}import type {{ Record }} from '../storage/model';\nexport const row: Record = result;\n"),
+    )
+    .unwrap();
+    let check = run(root.path(), "json");
+    assert_eq!(check.status.code(), Some(1));
+    let findings = source_findings(&check.stdout);
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0]["rule"], "forbiddenDependencies");
+    assert_eq!(findings[0]["files"], json!([{"path": "ui/page.ts", "line": 3}, {"path": "storage/model.ts"}]));
+    assert_eq!(findings[0]["details"], json!(["Use the service interface."]));
+}
+
 fn write_config(root: &Path, mut config: Value) {
     for limit in matis::metrics::config::LIMITS {
         config[limit] = Value::Null;
