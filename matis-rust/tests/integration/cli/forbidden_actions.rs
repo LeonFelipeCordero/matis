@@ -1,6 +1,7 @@
 use crate::support::cli::invoke;
+use matis::bootstrap::{migrate_database, repository_service};
 use serde_json::{Value, json};
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
 #[test]
 fn source_policies_check_calls_in_every_discovered_language() {
@@ -30,12 +31,13 @@ fn source_policies_check_calls_in_every_discovered_language() {
         fs::write(root.path().join("tests").join(file), source).unwrap();
     }
     fs::write(root.path().join("action.ts"), "window.setTimeout(() => {}, 0);").unwrap();
+    fs::write(root.path().join("action7.test.ts"), "window.setTimeout(() => {}, 0);").unwrap();
     fs::write(root.path().join("!action.js"), "setTimeout(() => {}, 0);").unwrap();
     fs::write(root.path().join(".matisignore"), "/tests/ignored.ts\n").unwrap();
     fs::write(root.path().join("tests/ignored.ts"), "window.setTimeout(() => {}, 0);").unwrap();
     write_config(
         root.path(),
-        json!({"forbiddenCalls": [{"files": ["tests/**", "**/*.test.ts", "!action.js"],
+        json!({"forbiddenCalls": [{"files": ["tests/**", "**/action[0-9].test.ts", "!action.js"],
         "calls": files.map(|(_, _, call)| call).into_iter().chain(["Timer", "Widget"]).collect::<Vec<_>>(),
         "message": "Use the project clock."}]}),
     );
@@ -57,7 +59,9 @@ fn source_policies_check_calls_in_every_discovered_language() {
             .iter()
             .any(|item| item["subject"] == "setTimeout" && item["files"] == json!([{"path": "!action.js", "line": 1}]))
     );
-    assert_eq!(findings.len(), files.len() + 1, "{findings:?}");
+    assert!(findings.iter().any(|item| item["subject"] == "window.setTimeout"
+        && item["files"] == json!([{"path": "action7.test.ts", "line": 1}])));
+    assert_eq!(findings.len(), files.len() + 2, "{findings:?}");
 }
 
 #[test]
@@ -76,6 +80,7 @@ fn constructor_policy_checks_explicit_java_type_and_not_references() {
             "  void run() { AllowConnection.open(); }\n",
             "  void shadow(Safe AllowConnection) { AllowConnection.open(); }\n",
             "  java.util.function.Consumer<Safe> use = AllowConnection -> AllowConnection.open();\n",
+            "  void qualified() { com.ph.connection.AllowConnection.open(); }\n",
             "}\n",
         ),
     )
@@ -97,44 +102,71 @@ fn constructor_policy_checks_explicit_java_type_and_not_references() {
     let config = json!({
         "forbiddenConstructors": [{"files": ["**/*.java", "**/*.ts"],
             "types": ["com.ph.connection.AllowConnection", "Timer"], "message": "Use a *fake*."}],
-        "forbiddenCalls": [{"files": ["**/*.java"], "calls": ["com.ph.connection.AllowConnection.open"]}]
+        "forbiddenCalls": [
+            {"files": ["**/*.java"], "calls": ["com.ph.connection.AllowConnection.open"]},
+            {"files": ["*.ts"], "calls": ["Timer"]}
+        ]
     });
     write_config(root.path(), config);
     let check = run(root.path(), "json");
     assert_eq!(check.status.code(), Some(1));
     let findings = source_findings(&check.stdout);
-    let locations: Vec<_> = findings.iter().map(|item| item["files"][0].clone()).collect();
+    let locations: Vec<_> = findings.iter().map(|item| (&item["rule"], &item["files"][0])).collect();
     assert_eq!(
         locations,
         [
-            json!({"path": "Action.java", "line": 3}),
-            json!({"path": "Action.java", "line": 4}),
-            json!({"path": "Action.java", "line": 8}),
-            json!({"path": "action.ts", "line": 1})
+            (&json!("forbiddenConstructors"), &json!({"path": "Action.java", "line": 3})),
+            (&json!("forbiddenConstructors"), &json!({"path": "Action.java", "line": 4})),
+            (&json!("forbiddenCalls"), &json!({"path": "Action.java", "line": 8})),
+            (&json!("forbiddenCalls"), &json!({"path": "Action.java", "line": 11})),
+            (&json!("forbiddenConstructors"), &json!({"path": "action.ts", "line": 1})),
+            (&json!("forbiddenCalls"), &json!({"path": "action.ts", "line": 2})),
         ]
     );
     assert_eq!(findings[0]["details"], json!(["Use a *fake*."]));
     let markdown = run(root.path(), "markdown");
+    assert_eq!(markdown.status.code(), Some(1));
     let markdown = String::from_utf8_lossy(&markdown.stdout);
     assert!(markdown.contains("`Action.java:3`"));
     assert!(markdown.contains(r"Use a \*fake\*\."), "{markdown}");
 
-    write_config(root.path(), json!({"forbiddenConstructors": [{"files": ["src/**"], "types": ["Timer"]}]}));
+    write_config(root.path(), json!({"forbiddenConstructors": []}));
     let clean = run(root.path(), "json");
     assert_eq!(clean.status.code(), Some(0), "{}", String::from_utf8_lossy(&clean.stdout));
+    assert!(source_findings(&clean.stdout).is_empty());
 }
 
 #[test]
-fn invalid_policy_is_rejected_before_analysis() {
-    let root = tempfile::tempdir().unwrap();
+fn check_save_keeps_the_graph_when_a_later_policy_is_invalid() {
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path().join("repo");
+    fs::create_dir(&root).unwrap();
+    let database = workspace.path().join("graph.sqlite");
+    migrate_database(Some(&database)).unwrap();
+    let mut check = Command::new(env!("CARGO_BIN_EXE_matis"));
+    check.current_dir(&root).env("DATABASE_PATH", &database).args(["check", "--save", "--format", "json"]);
+
+    let source = root.join("clock.py");
+    fs::write(&source, "def tick():\n    return 1\ntick()\n").unwrap();
+    write_config(&root, json!({"forbiddenCalls": [{"files": ["*.py"], "calls": ["tick"]}]}));
+    let result = check.output().unwrap();
+    assert_eq!(result.status.code(), Some(1));
+    assert!(result.stderr.is_empty(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert_eq!(source_findings(&result.stdout)[0]["subject"], "tick");
+    let mut service = repository_service(Some(&database)).unwrap();
+    let saved = service.list().unwrap().pop().unwrap();
+    let graph = service.get_report_facts(&saved.id).unwrap().unwrap();
+    assert!(graph["nodes"].as_array().unwrap().iter().any(|node| node["name"] == "tick"));
+
+    fs::write(&source, "def tock():\n    return 2\n").unwrap();
     write_config(
-        root.path(),
-        json!({"forbiddenCalls": [
+        &root,
+        json!({"forbiddenConstructors": [{"files": ["**"], "types": ["Bad Name"]}], "forbiddenCalls": [
             {"files": ["../outside/**"], "calls": ["setTimeout"], "message": "First\u{2028}Second"},
             {"files": ["**"], "calls": ["setTimeout"], "message": "First\u{2029}Second"}
         ]}),
     );
-    let result = invoke(&["check", "--folder", root.path().to_str().unwrap()]);
+    let result = check.output().unwrap();
     let diagnostic = String::from_utf8_lossy(&result.stderr);
     assert_eq!(result.status.code(), Some(1));
     assert!(result.stdout.is_empty());
@@ -144,6 +176,11 @@ fn invalid_policy_is_rejected_before_analysis() {
         "{diagnostic}"
     );
     assert!(diagnostic.contains("single-line"), "{diagnostic}");
+    assert!(
+        diagnostic.contains("forbiddenConstructors.0.types.0") && diagnostic.contains("exact name without whitespace"),
+        "{diagnostic}"
+    );
+    assert_eq!(service.get_report_facts(&saved.id).unwrap().unwrap(), graph);
 }
 
 #[test]
