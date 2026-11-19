@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import { ArrowRight, FolderGit2 } from 'lucide-react'
-import type { Repository } from '@/lib/api'
 import { formatDate } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
+import type { Repository } from '@/lib/api'
 
 export function RepositoryRow({ repository }: { repository: Repository }) {
   return (

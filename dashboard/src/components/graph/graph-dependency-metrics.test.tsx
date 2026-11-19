@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { fixtureNodes } from '@/lib/project-graph-fixture'
 import { GraphReport } from './graph-report'
 import { GraphDependencyMetrics } from './graph-dependency-metrics'
 import { reportView } from './graph-report-test.helpers'
@@ -7,7 +8,6 @@ import type {
   Artifact,
   NodeDependencyMetrics,
 } from '@/lib/architecture-artifact'
-import { fixtureNodes } from '@/lib/project-graph-fixture'
 
 function fixture(): Artifact {
   return {

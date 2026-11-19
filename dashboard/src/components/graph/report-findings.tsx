@@ -1,6 +1,6 @@
 import { AlertTriangle, CircleAlert, CircleCheck, Info } from 'lucide-react'
-import type { GraphView, ViewCycle } from '@/lib/graph-data'
 import { Button } from '@/components/ui/button'
+import type { GraphView, ViewCycle } from '@/lib/graph-data'
 
 export function ReportFindings({
   view,

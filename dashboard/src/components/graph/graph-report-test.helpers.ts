@@ -1,8 +1,8 @@
+import { fixtureDetails } from '@/lib/graph-details-test.helpers'
+import { buildProjectGraph } from '@/lib/project-graph'
 import type { Artifact } from '@/lib/architecture-artifact'
 import type { GraphView } from '@/lib/graph-data'
 import type { GraphScope } from '@/lib/project-graph'
-import { fixtureDetails } from '@/lib/graph-details-test.helpers'
-import { buildProjectGraph } from '@/lib/project-graph'
 
 export function reportView(
   artifact: Artifact,

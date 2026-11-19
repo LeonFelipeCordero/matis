@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { ReportFindings } from './report-findings'
-import { ReportItems } from './report-items'
-import type { GraphView } from '@/lib/graph-data'
 import { fixtureDetails } from '@/lib/graph-details-test.helpers'
 import { fixtureNodes } from '@/lib/project-graph-fixture'
 import { buildProjectGraph } from '@/lib/project-graph'
+import { ReportFindings } from './report-findings'
+import { ReportItems } from './report-items'
+import type { GraphView } from '@/lib/graph-data'
 
 function fixture(): GraphView {
   const artifact = {

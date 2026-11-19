@@ -1,10 +1,10 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { buildProjectGraph } from '@/lib/project-graph'
 import { GraphSidebar } from './graph-sidebar'
 import { GraphReport } from './graph-report'
 import { reportView } from './graph-report-test.helpers'
 import type { Artifact, NodeComplexity } from '@/lib/architecture-artifact'
-import { buildProjectGraph } from '@/lib/project-graph'
 
 const metrics = {
   baseCyclomaticComplexity: 5,
