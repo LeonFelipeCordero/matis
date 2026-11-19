@@ -11,7 +11,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-89718e.svg" alt="License: MIT"></a>
 </p>
 
-Matis maps a local codebase and measures complexity, size, parameters, circular imports, and dependency impact. Use `matis report` for human- or AI-readable measurements, `matis check` to enforce configurable limits, or its web UI to explore dependencies.
+Matis maps a local codebase and measures complexity, size, parameters, circular imports, and dependency impact. Use `matis report` for human- or AI-readable measurements, `matis check` to enforce configurable limits and architecture rules, or its web UI to explore dependencies.
 
 Rust parses files with Tree-sitter, resolves repository-local relationships, and builds a code graph. Analysis runs locally, on demand, without database access by default. Saved graphs use normalized SQLite tables rather than whole-graph JSON blobs; the Bun/React UI reads those facts directly. No cloud service, HTTP server for the importer, cloning, or background indexing.
 
@@ -52,12 +52,12 @@ Matis supports grammars recognized by its pinned Tree-sitter language pack, **ex
 
 ### Project checks
 
-`matis check` enforces the defaults below. Override them in the analyzed folder's root `matis.json`, for example `{"maxParameters": 5}`. Omitted keys keep their defaults; `null` disables a check.
+Run `matis check -f .` from your project root. Configure checks in that folder's `matis.json`. Omitted limits keep their defaults; set a limit to `null` to disable it.
 
 | Config key | Default maximum | Applies to |
 | --- | --- | --- |
-| `maxFileLines` | 600 | Files |
-| `maxFunctionLines` | 100 | Functions/methods |
+| `maxFileLines` | 700 | Files |
+| `maxFunctionLines` | 150 | Functions/methods |
 | `maxParameters` | 3 | Functions/methods |
 | `maxWeightedComplexity` | 8 | Functions/methods |
 | `maxDecisionDepth` | 3 | Functions/methods |
@@ -65,8 +65,34 @@ Matis supports grammars recognized by its pinned Tree-sitter language pack, **ex
 | `maxCircularImportGroups` | 0 | Whole project |
 | `maxChangeImpact` | `null` (disabled) | Files/modules |
 | `maxInstability` | `null` (disabled) | Files/modules |
+| `maxFanIn` | 30 | Files |
+| `maxFanOut` | 20 | Files |
 
-Checks fail when limits are exceeded or analysis is incomplete.
+Use `fanExclude` with Git-style path patterns to suppress fan-in and fan-out findings for selected files without changing dependency counts or other checks.
+
+To enforce architecture boundaries, use `forbiddenDependencies`. To ban specific calls or explicit `new` expressions in selected files, use `forbiddenCalls` or `forbiddenConstructors`. These rule lists are opt-in and default to `[]`.
+
+```json
+{
+  "forbiddenDependencies": [
+    {
+      "from": ["src/ui/**"],
+      "to": ["src/storage/**"],
+      "message": "Use the service interface instead of storage."
+    }
+  ],
+  "forbiddenCalls": [
+    {"files": ["tests/**/*.ts"], "calls": ["setTimeout", "window.setTimeout"]}
+  ],
+  "forbiddenConstructors": [
+    {"files": ["src/test/**/*.java"], "types": ["java.util.Random"]}
+  ]
+}
+```
+
+Architecture rules match repository-relative path globs and check direct, resolved dependencies, including type-only imports. The example rejects `UI → storage` but allows `UI → service → storage`. Ignored files are not checked. See the [check guide](docs/check-fixes.md) for call and constructor language support, and for `helpLinks` to attach your own fix guidance.
+
+Checks fail when a limit is exceeded, a configured rule is violated, or analysis is incomplete.
 
 ### Mutation manifests
 
@@ -145,7 +171,7 @@ Run against the whole target project, not just changed files:
 
 ```sh
 matis report -f .   # Show measurements
-matis check -f .    # Enforce limits; use in CI
+matis check -f .    # Enforce limits and rules; use in CI
 matis-migrate      # Migrate before database-backed commands
 matis index -f .    # Register/update and save the graph
 matis projects     # List registered projects as JSON
@@ -153,7 +179,7 @@ matis projects     # List registered projects as JSON
 
 Reports and checks analyze current sources without saving. Both default to Markdown; add `--format json` for structured output or `--save` to store the graph. The folder defaults to `.`.
 
-`matis check` exits 0 when checks pass and 1 when findings exist. `matis report` does not enforce limits.
+`matis check` exits 0 when checks pass and 1 when findings exist. `matis report` does not enforce checks.
 
 For an AI coding agent with shell access, add this instruction to its project rules (for example, `AGENTS.md`):
 
@@ -190,7 +216,7 @@ matis-rust/target/release/matis check -f .
 
 Rust tests run in parallel by default. Tests must isolate files, databases, and ports. Dashboard integration tests require Cargo and build the Rust CLI plus a test-only artifact helper once per test process.
 
-CI runs Rust checks for `matis-rust/` changes and dashboard checks for changes to either `dashboard/` or `matis-rust/`. Component workflows also run when their own files change. Matis CI runs a full-project `matis check --f . --format json` on pushes and pull requests to `main`; its exit status enforces configured limits. `.matisignore` excludes dashboard sources, which have separate TypeScript checks. Architecture tests enforce persistence boundaries.
+CI runs Rust checks for `matis-rust/` changes and dashboard checks for changes to either `dashboard/` or `matis-rust/`. Component workflows also run when their own files change. Matis CI runs a full-project `matis check --f . --format json` on pushes and pull requests to `main`; its exit status enforces configured checks. `.matisignore` excludes dashboard sources, which have separate TypeScript checks. Architecture tests enforce persistence boundaries.
 
 The dashboard uses TypeScript 7 for `tsc` via the `@typescript/native` alias, while ESLint uses the TypeScript 6 compatibility API via the `typescript` alias. This follows Microsoft's [side-by-side setup](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0) until typescript-eslint supports the new compiler API.
 
