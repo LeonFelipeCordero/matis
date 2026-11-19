@@ -52,6 +52,8 @@ Matis supports grammars recognized by its pinned Tree-sitter language pack, **ex
 
 ### Project checks
 
+See the [instructions for using Matis](docs/how-to-use.md) to choose checks, fix findings, and enforce project rules in CI.
+
 Run `matis check -f .` from your project root. Configure checks in that folder's `matis.json`. Omitted limits keep their defaults; set a limit to `null` to disable it.
 
 | Config key | Default maximum | Applies to |
