@@ -81,7 +81,9 @@ fn constructor_policy_checks_explicit_java_type_and_not_references() {
             "  void shadow(Safe AllowConnection) { AllowConnection.open(); }\n",
             "  java.util.function.Consumer<Safe> use = AllowConnection -> AllowConnection.open();\n",
             "  void qualified() { com.ph.connection.AllowConnection.open(); }\n",
+            "  Object member(Outer outer) { return outer.new AllowConnection(); }\n",
             "}\n",
+            "class Outer { class AllowConnection {} }\n",
         ),
     )
     .unwrap();
