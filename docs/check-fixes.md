@@ -83,6 +83,8 @@ The `files` entries are case-sensitive, project-relative POSIX globs. `*` stays 
 
 Call rules work in Python, JavaScript, JSX, TypeScript, TSX, Java, Kotlin, Go, Rust, and Elixir. Names are exact and case-sensitive. List the bare and qualified spellings separately if you want both. Java additionally matches direct qualified spellings and explicit imports (for example, `com.ph.connection.AllowConnection.open`). Matis does not infer receiver types or follow aliases, wildcard imports, or dynamic calls.
 
+In Go, `forbiddenCalls` skips calls whose callee the parser reads as an index expression, including `Mark[int]()` and `labels.Mark[int]()`. The same syntax can call a function from a slice indexed by a variable named `int`. The rule also skips expressions parsed as conversions: for example, `Mark[int](1)` can be a generic function call or a conversion to a generic type. The rule does not resolve declarations to tell these cases apart.
+
 ## forbiddenConstructors
 
 Use `forbiddenConstructors` to check explicit `new` expressions in Java, JavaScript, JSX, TypeScript, and TSX. In Java, `new AllowConnection()` matches the fully qualified rule above when an explicit import identifies the class. An import or a constructor reference alone is not a violation. In languages with call-like construction syntax (such as Python and Kotlin), use `forbiddenCalls` for the written name instead.
