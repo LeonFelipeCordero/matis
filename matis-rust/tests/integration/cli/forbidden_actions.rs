@@ -257,7 +257,12 @@ fn architecture_policy_rejects_direct_dependencies_but_allows_indirect_dependenc
         fs::create_dir(root.path().join(directory)).unwrap();
     }
     let ui = root.path().join("ui/page.ts");
-    let allowed = "import { read } from '../service/reader';\nexport const result = read();\n";
+    let allowed = concat!(
+        "import { read } from '../service/reader';\n",
+        "import type { Missing } from '../storage/missing';\n",
+        "function local() { return read(); }\n",
+        "export const result = local();\n",
+    );
     fs::write(&ui, allowed).unwrap();
     fs::write(
         root.path().join("service/reader.ts"),
@@ -268,7 +273,8 @@ fn architecture_policy_rejects_direct_dependencies_but_allows_indirect_dependenc
     write_config(
         root.path(),
         json!({"forbiddenDependencies": [{
-            "from": ["ui/**"], "to": ["storage/model.ts"], "message": "Use the service interface."
+            "from": ["ui/**"], "to": ["storage/**/*.ts", "ui/**"],
+            "message": "Use the service interface."
         }]}),
     );
 
@@ -278,7 +284,11 @@ fn architecture_policy_rejects_direct_dependencies_but_allows_indirect_dependenc
 
     fs::write(
         &ui,
-        format!("{allowed}import type {{ Record }} from '../storage/model';\nexport const row: Record = result;\n"),
+        format!(
+            "{allowed}import type {{ Record }} from '../storage/model';\n\
+             import type {{ Record as Row }} from '../storage/model';\n\
+             export const rows: [Record, Row] = [result, result];\n"
+        ),
     )
     .unwrap();
     let check = run(root.path(), "json");
@@ -286,8 +296,13 @@ fn architecture_policy_rejects_direct_dependencies_but_allows_indirect_dependenc
     let findings = source_findings(&check.stdout);
     assert_eq!(findings.len(), 1, "{findings:?}");
     assert_eq!(findings[0]["rule"], "forbiddenDependencies");
-    assert_eq!(findings[0]["files"], json!([{"path": "ui/page.ts", "line": 3}, {"path": "storage/model.ts"}]));
+    assert_eq!(findings[0]["files"], json!([{"path": "ui/page.ts", "line": 5}, {"path": "storage/model.ts"}]));
     assert_eq!(findings[0]["details"], json!(["Use the service interface."]));
+
+    write_config(root.path(), json!({}));
+    let check = run(root.path(), "json");
+    assert_eq!(check.status.code(), Some(0));
+    assert!(source_findings(&check.stdout).is_empty());
 }
 
 fn write_config(root: &Path, mut config: Value) {
