@@ -286,7 +286,11 @@ fn forbidden_errors(path: &str, entry: &Value, target: &str) -> Vec<String> {
     for (key, value) in fields {
         let error = match key.as_str() {
             "files" => None,
-            "message" if value.as_str().is_some_and(nonblank) => None,
+            "message"
+                if value.as_str().is_some_and(|text| nonblank(text) && !text.contains(['\u{2028}', '\u{2029}'])) =>
+            {
+                None
+            }
             "message" => Some(("Use a nonblank single-line message", "value_error")),
             name if name == target => None,
             _ => Some(("Extra inputs are not permitted", "extra_forbidden")),
@@ -327,10 +331,7 @@ fn action_name(text: &str) -> bool {
 }
 
 fn valid_source_glob(text: &str) -> bool {
-    nonblank(text)
-        && !text.contains('\\')
-        && !text.starts_with('!')
-        && !text.split('/').any(|part| matches!(part, "" | "." | ".."))
+    nonblank(text) && !text.contains('\\') && !text.split('/').any(|part| matches!(part, "" | "." | ".."))
 }
 
 fn normalized_limit(name: &str, input: &Value) -> Value {

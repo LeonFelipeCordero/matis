@@ -30,11 +30,12 @@ fn source_policies_check_calls_in_every_discovered_language() {
         fs::write(root.path().join("tests").join(file), source).unwrap();
     }
     fs::write(root.path().join("action.ts"), "window.setTimeout(() => {}, 0);").unwrap();
+    fs::write(root.path().join("!action.js"), "setTimeout(() => {}, 0);").unwrap();
     fs::write(root.path().join(".matisignore"), "/tests/ignored.ts\n").unwrap();
     fs::write(root.path().join("tests/ignored.ts"), "window.setTimeout(() => {}, 0);").unwrap();
     write_config(
         root.path(),
-        json!({"forbiddenCalls": [{"files": ["tests/**", "**/*.test.ts"],
+        json!({"forbiddenCalls": [{"files": ["tests/**", "**/*.test.ts", "!action.js"],
         "calls": files.map(|(_, _, call)| call).into_iter().chain(["Timer", "Widget"]).collect::<Vec<_>>(),
         "message": "Use the project clock."}]}),
     );
@@ -51,7 +52,12 @@ fn source_policies_check_calls_in_every_discovered_language() {
             "Missing {file}: {findings:?}"
         );
     }
-    assert_eq!(findings.len(), files.len(), "{findings:?}");
+    assert!(
+        findings
+            .iter()
+            .any(|item| item["subject"] == "setTimeout" && item["files"] == json!([{"path": "!action.js", "line": 1}]))
+    );
+    assert_eq!(findings.len(), files.len() + 1, "{findings:?}");
 }
 
 #[test]
@@ -117,12 +123,23 @@ fn constructor_policy_checks_explicit_java_type_and_not_references() {
 #[test]
 fn invalid_policy_is_rejected_before_analysis() {
     let root = tempfile::tempdir().unwrap();
-    write_config(root.path(), json!({"forbiddenCalls": [{"files": ["../outside/**"], "calls": ["setTimeout"]}]}));
+    write_config(
+        root.path(),
+        json!({"forbiddenCalls": [
+            {"files": ["../outside/**"], "calls": ["setTimeout"], "message": "First\u{2028}Second"},
+            {"files": ["**"], "calls": ["setTimeout"], "message": "First\u{2029}Second"}
+        ]}),
+    );
     let result = invoke(&["check", "--folder", root.path().to_str().unwrap()]);
     let diagnostic = String::from_utf8_lossy(&result.stderr);
     assert_eq!(result.status.code(), Some(1));
     assert!(result.stdout.is_empty());
     assert!(diagnostic.contains("forbiddenCalls.0.files.0") && diagnostic.contains("project-relative"), "{diagnostic}");
+    assert!(
+        diagnostic.contains("forbiddenCalls.0.message") && diagnostic.contains("forbiddenCalls.1.message"),
+        "{diagnostic}"
+    );
+    assert!(diagnostic.contains("single-line"), "{diagnostic}");
 }
 
 fn write_config(root: &Path, mut config: Value) {
