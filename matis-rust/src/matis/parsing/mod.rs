@@ -1,3 +1,4 @@
+pub(crate) mod actions;
 pub mod adapters;
 mod catalog;
 pub mod discovery;

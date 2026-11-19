@@ -153,12 +153,19 @@ fn parse_tree(source: &SourceFile, adapter: LanguageAdapter<'_>) -> Result<Optio
 /// Returns an error for unsupported languages or failures in grammar lookup, parsing,
 /// native processing, or declaration query compilation. Syntax errors alone are diagnostics.
 pub fn parse_file(source: SourceFile) -> Result<ParsedFile> {
+    parse_file_with(source, &mut |_| {})
+}
+
+pub(crate) fn parse_file_with(source: SourceFile, observe: &mut impl FnMut(ParsedSyntax<'_>)) -> Result<ParsedFile> {
     let adapter = get_adapter(&source.language)?;
     let content_hash = format!("{:x}", Sha256::digest(&source.source));
     let text = String::from_utf8_lossy(&source.source).into_owned();
     let syntax_source = SourceFile { source: text.as_bytes().to_vec(), ..source.clone() };
     let tree = parse_tree(&syntax_source, adapter)?;
     let root = tree.as_ref().map(|tree| tree.root_node());
+    if let Some(root) = root {
+        observe(ParsedSyntax { source: &syntax_source, root });
+    }
     let parse_error = if adapter.is_dedicated() { root.and_then(syntax_error) } else { None };
     let calls = root.map(|root| extract_calls(&syntax_source, root, adapter)).unwrap_or_default();
     let result = process(&text, &ProcessConfig::new(source.language.clone()))?;
@@ -189,5 +196,14 @@ pub fn parse_file(source: SourceFile) -> Result<ParsedFile> {
 /// # Errors
 /// Propagates the first `parse_file` error without returning a partial repository.
 pub fn parse_files(files: Vec<SourceFile>) -> Result<ParsedRepository> {
-    Ok(ParsedRepository { files: files.into_iter().map(parse_file).collect::<Result<Vec<_>>>()? })
+    parse_files_with(files, |_| {})
+}
+
+pub(crate) fn parse_files_with(
+    files: Vec<SourceFile>,
+    mut observe: impl FnMut(ParsedSyntax<'_>),
+) -> Result<ParsedRepository> {
+    Ok(ParsedRepository {
+        files: files.into_iter().map(|file| parse_file_with(file, &mut observe)).collect::<Result<_>>()?,
+    })
 }

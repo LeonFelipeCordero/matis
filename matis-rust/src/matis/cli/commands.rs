@@ -66,7 +66,13 @@ fn standard_command(command: &str, matches: &clap::ArgMatches) -> Result<i32> {
     }
     let root = absolute_path(Path::new(options.get("--folder", ".")))?;
     let config = if command == "check" { Some(crate::metrics::config::load_config(&root)?) } else { None };
-    let artifact = analyze_repository(&root)?;
+    let mut source_findings = Vec::new();
+    let artifact = match config.as_ref().filter(|config| crate::metrics::forbidden::enabled(config)) {
+        Some(config) => crate::indexer::analyze_repository_with(&root, |syntax| {
+            crate::metrics::forbidden::findings(config, syntax, &mut source_findings);
+        })?,
+        None => analyze_repository(&root)?,
+    };
     if command == "index" {
         let graph = crate::bootstrap::repository_service(None)?.save_folder(&root, &artifact)?;
         println!(
@@ -84,7 +90,8 @@ fn standard_command(command: &str, matches: &clap::ArgMatches) -> Result<i32> {
     if command == "report" {
         return print_report(&report, format);
     }
-    print_check(&report, config.as_ref().unwrap(), format)
+    let check = crate::metrics::check::build_check_with(&report, config.as_ref().unwrap(), Some(source_findings))?;
+    print_check(&check, format)
 }
 fn print_report(report: &serde_json::Value, format: &str) -> Result<i32> {
     println!(
@@ -97,14 +104,13 @@ fn print_report(report: &serde_json::Value, format: &str) -> Result<i32> {
     );
     Ok(0)
 }
-fn print_check(report: &serde_json::Value, config: &serde_json::Value, format: &str) -> Result<i32> {
-    let check = crate::metrics::check::build_check(report, config)?;
+fn print_check(check: &serde_json::Value, format: &str) -> Result<i32> {
     println!(
         "{}",
         if format == "json" {
-            serde_json::to_string_pretty(&check)?
+            serde_json::to_string_pretty(check)?
         } else {
-            crate::metrics::check::render_check(&check)
+            crate::metrics::check::render_check(check)
         }
     );
     Ok(if check["findings"].as_array().is_some_and(|f| !f.is_empty()) { 1 } else { 0 })

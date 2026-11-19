@@ -1,3 +1,4 @@
+use super::forbidden::RULES;
 use crate::{mutations::config::MutationConfig, parsing::ignore_spec::IgnoreSpec};
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
@@ -21,7 +22,8 @@ pub const LIMITS: [&str; 11] = [
 pub fn default_config() -> Value {
     json!({"maxFileLines": 700, "maxFunctionLines": 150, "maxParameters": 3, "maxWeightedComplexity": 8,
         "maxDecisionDepth": 3, "maxNestedLoops": 0, "maxCircularImportGroups": 0,
-        "maxChangeImpact": null, "maxInstability": null, "maxFanIn": 30, "maxFanOut": 20, "fanExclude": []})
+        "maxChangeImpact": null, "maxInstability": null, "maxFanIn": 30, "maxFanOut": 20, "fanExclude": [],
+        "forbiddenCalls": [], "forbiddenConstructors": []})
 }
 
 /// Read `root/matis.json` and return check limits, excluding validated mutation settings.
@@ -160,6 +162,7 @@ fn validate(value: &Value, project: bool) -> Result<Value> {
     errors.extend(apply_limits(value, &mut config));
     errors.extend(apply_help_links(value, &mut config));
     errors.extend(apply_fan_exclude(value, &mut config));
+    errors.extend(apply_forbidden(value, &mut config));
     if project {
         errors.extend(apply_mutations(value, &mut config)?);
     }
@@ -177,6 +180,7 @@ fn extra_errors(value: &Value, project: bool) -> Vec<String> {
             !(LIMITS.contains(&name.as_str())
                 || *name == "helpLinks"
                 || *name == "fanExclude"
+                || RULES.iter().any(|(rule, _)| rule == name)
                 || project && *name == "mutations")
         })
         .map(|(name, input)| validation_error(name, ("Extra inputs are not permitted", "extra_forbidden"), input))
@@ -191,22 +195,23 @@ fn apply_help_links(value: &Value, config: &mut Value) -> Vec<String> {
     };
     let mut errors = Vec::new();
     for (rule, link) in entries {
-        let error = if !LIMITS.contains(&rule.as_str()) && rule != "analysis" {
-            Some(("Unknown check rule", "extra_forbidden"))
-        } else if !link.as_str().is_some_and(|url| {
-            url::Url::parse(url).is_ok_and(|parsed| matches!(parsed.scheme(), "http" | "https"))
-                && url
-                    .split_once("://")
-                    .is_some_and(|(_, rest)| rest.split(['/', '?', '#']).next().is_some_and(|host| !host.is_empty()))
-                && !url.chars().any(|ch| ch.is_whitespace() || ch.is_control() || matches!(ch, '<' | '>' | '\\'))
-        }) {
-            Some((
-                "Use a nonempty HTTP or HTTPS link without whitespace, angle brackets, or backslashes",
-                "value_error",
-            ))
-        } else {
-            None
-        };
+        let error =
+            if !LIMITS.contains(&rule.as_str()) && rule != "analysis" && !RULES.iter().any(|(name, _)| name == rule) {
+                Some(("Unknown check rule", "extra_forbidden"))
+            } else if !link.as_str().is_some_and(|url| {
+                url::Url::parse(url).is_ok_and(|parsed| matches!(parsed.scheme(), "http" | "https"))
+                    && url.split_once("://").is_some_and(|(_, rest)| {
+                        rest.split(['/', '?', '#']).next().is_some_and(|host| !host.is_empty())
+                    })
+                    && !url.chars().any(|ch| ch.is_whitespace() || ch.is_control() || matches!(ch, '<' | '>' | '\\'))
+            }) {
+                Some((
+                    "Use a nonempty HTTP or HTTPS link without whitespace, angle brackets, or backslashes",
+                    "value_error",
+                ))
+            } else {
+                None
+            };
         if let Some(error) = error {
             errors.push(validation_error(&format!("helpLinks.{rule}"), error, link));
         }
@@ -254,6 +259,81 @@ fn apply_fan_exclude(value: &Value, config: &mut Value) -> Vec<String> {
     config["fanExclude"] = input.clone();
     errors
 }
+fn apply_forbidden(value: &Value, config: &mut Value) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (rule, target) in RULES {
+        let Some(input) = value.get(rule) else { continue };
+        let Some(rules) = input.as_array() else {
+            errors.push(validation_error(rule, ("Input should be a valid array", "list_type"), input));
+            continue;
+        };
+        errors.extend(
+            rules
+                .iter()
+                .enumerate()
+                .flat_map(|(index, entry)| forbidden_errors(&format!("{rule}.{index}"), entry, target)),
+        );
+        config[rule] = input.clone();
+    }
+    errors
+}
+
+fn forbidden_errors(path: &str, entry: &Value, target: &str) -> Vec<String> {
+    let Some(fields) = entry.as_object() else {
+        return vec![validation_error(path, ("Input should be an object", "model_type"), entry)];
+    };
+    let mut errors = Vec::new();
+    for (key, value) in fields {
+        let error = match key.as_str() {
+            "files" => None,
+            "message"
+                if value.as_str().is_some_and(|text| nonblank(text) && !text.contains(['\u{2028}', '\u{2029}'])) =>
+            {
+                None
+            }
+            "message" => Some(("Use a nonblank single-line message", "value_error")),
+            name if name == target => None,
+            _ => Some(("Extra inputs are not permitted", "extra_forbidden")),
+        };
+        if let Some(error) = error {
+            errors.push(validation_error(&format!("{path}.{key}"), error, value));
+        }
+    }
+    errors.extend(forbidden_list_errors(path, ("files", &entry["files"])));
+    errors.extend(forbidden_list_errors(path, (target, &entry[target])));
+    errors
+}
+
+fn forbidden_list_errors(path: &str, (key, value): (&str, &Value)) -> Vec<String> {
+    let path = format!("{path}.{key}");
+    let Some(items) = value.as_array().filter(|items| !items.is_empty()) else {
+        return vec![validation_error(&path, ("Use a nonempty array", "value_error"), value)];
+    };
+    let (valid, reason): (fn(&str) -> bool, _) = if key == "files" {
+        (valid_source_glob, "Use a project-relative POSIX glob")
+    } else {
+        (action_name, "Use a nonempty exact name without whitespace")
+    };
+    items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| !item.as_str().is_some_and(valid))
+        .map(|(index, item)| validation_error(&format!("{path}.{index}"), (reason, "value_error"), item))
+        .collect()
+}
+
+fn nonblank(text: &str) -> bool {
+    !text.trim().is_empty() && !text.chars().any(char::is_control)
+}
+
+fn action_name(text: &str) -> bool {
+    nonblank(text) && !text.chars().any(char::is_whitespace)
+}
+
+fn valid_source_glob(text: &str) -> bool {
+    nonblank(text) && !text.contains('\\') && !text.split('/').any(|part| matches!(part, "" | "." | ".."))
+}
+
 fn normalized_limit(name: &str, input: &Value) -> Value {
     if name == "maxInstability" && !input.is_null() {
         return json!(input.as_f64().unwrap());

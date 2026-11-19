@@ -86,7 +86,7 @@ fn reference_target(node: Node<'_>, source: &[u8]) -> CallTarget {
     (Some(name), qualifier.is_none(), qualifier)
 }
 
-fn callee_node(node: Node<'_>) -> Option<Node<'_>> {
+pub(super) fn callee_node(node: Node<'_>) -> Option<Node<'_>> {
     let target = field(node, &["function", "callee", "target", "name", "method", "constructor", "type"])
         .or_else(|| node.named_child(0))?;
     if matches!(target.kind(), "generic_function" | "template_function" | "parameterized_expression") {
