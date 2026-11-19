@@ -53,7 +53,7 @@ pub(crate) fn visit(syntax: &ParsedSyntax<'_>, mut observe: impl FnMut(Action)) 
             "new_expression" | "object_creation_expression" => ActionKind::Constructor,
             _ => ActionKind::Call,
         };
-        let qualified = java.as_ref().and_then(|imports| java_qualified(site.node, &name, kind, imports));
+        let qualified = java.as_ref().and_then(|imports| java_qualified(site.node, &name, imports));
         let offset = (site.node.start_byte() as isize + site.offset) as usize;
         observe(Action { name, qualified, kind, line: newlines.partition_point(|i| *i < offset) + 1 });
     });
@@ -238,8 +238,8 @@ fn java_scope(node: Node<'_>, declaration: Node<'_>) -> Range<usize> {
 }
 
 // shortcut: explicit Java imports only; use a Java symbol resolver for inferred receiver types and wildcard imports.
-fn java_qualified(node: Node<'_>, name: &str, kind: ActionKind, imports: &JavaImports) -> Option<String> {
-    let constructor = kind == ActionKind::Constructor;
+fn java_qualified(node: Node<'_>, name: &str, imports: &JavaImports) -> Option<String> {
+    let constructor = is_constructor(node);
     let (head, tail) = name.split_once('.').map_or((name, ""), |(head, tail)| (head, tail));
     if !constructor && tail.is_empty() {
         return None;
