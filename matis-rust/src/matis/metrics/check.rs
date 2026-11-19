@@ -1,5 +1,6 @@
 use super::{
     config::{integer_text, validate_config},
+    forbidden,
     report_markdown::{code, location, metric_label, value_text},
 };
 use crate::parsing::ignore_spec::IgnoreSpec;
@@ -148,14 +149,15 @@ fn cycle_paths(group: &Value) -> Result<Vec<String>> {
 /// Null limits disable checks; unavailable enabled metrics and parse diagnostics become findings.
 ///
 /// # Errors
-/// Reject invalid settings, malformed report arrays, or nonnumeric checked metrics.
+/// Reject invalid settings, source rules without source analysis, malformed report arrays,
+/// or nonnumeric checked metrics.
 pub fn build_check(report: &Value, config: &Value) -> Result<Value> {
     build_check_with(report, config, None)
 }
 
 pub(crate) fn build_check_with(report: &Value, config: &Value, source_findings: Option<Vec<Value>>) -> Result<Value> {
     let config = validate_config(config)?;
-    if source_findings.is_none() && super::forbidden::enabled(&config) {
+    if source_findings.is_none() && forbidden::enabled(&config) {
         anyhow::bail!("Forbidden action rules require source analysis");
     }
     let patterns: Vec<_> =
@@ -199,8 +201,14 @@ fn finding_section(finding: &Value) -> String {
         rows.push(format!("- {}", code(&location(file))));
     }
     rows.push(String::new());
+    let source_rule = forbidden::RULES.iter().any(|(rule, _)| finding["rule"] == *rule);
     for detail in finding["details"].as_array().into_iter().flatten() {
-        rows.push(format!("- {}", detail.as_str().unwrap_or("")));
+        let detail = detail.as_str().unwrap_or("");
+        if source_rule {
+            rows.push(format!("- {}", literal_markdown(detail)));
+        } else {
+            rows.push(format!("- {detail}"));
+        }
     }
     if let Some(url) = finding["helpUrl"].as_str() {
         let link = if url::Url::parse(url).is_ok_and(|parsed| matches!(parsed.host(), Some(url::Host::Ipv6(_)))) {
@@ -220,6 +228,17 @@ fn finding_section(finding: &Value) -> String {
         rows.push(format!("\nHow to fix: {link}"));
     }
     rows.join("\n")
+}
+
+fn literal_markdown(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if ch.is_ascii_punctuation() {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
 }
 
 /// Format check findings as Markdown, or return `All checks passed.` when none exist.

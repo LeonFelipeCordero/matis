@@ -96,13 +96,14 @@ fn constructor_policy_checks_explicit_java_type_and_not_references() {
     fs::write(root.path().join("action.ts"), "const timer = new Timer();\nTimer();").unwrap();
     let config = json!({
         "forbiddenConstructors": [{"files": ["**/*.java", "**/*.ts"],
-            "types": ["com.ph.connection.AllowConnection", "Timer"], "message": "Use a fake."}],
+            "types": ["com.ph.connection.AllowConnection", "Timer"], "message": "Use a *fake*."}],
         "forbiddenCalls": [{"files": ["**/*.java"], "calls": ["com.ph.connection.AllowConnection.open"]}]
     });
     write_config(root.path(), config);
     let check = run(root.path(), "json");
     assert_eq!(check.status.code(), Some(1));
-    let locations: Vec<_> = source_findings(&check.stdout).into_iter().map(|item| item["files"][0].clone()).collect();
+    let findings = source_findings(&check.stdout);
+    let locations: Vec<_> = findings.iter().map(|item| item["files"][0].clone()).collect();
     assert_eq!(
         locations,
         [
@@ -112,8 +113,11 @@ fn constructor_policy_checks_explicit_java_type_and_not_references() {
             json!({"path": "action.ts", "line": 1})
         ]
     );
+    assert_eq!(findings[0]["details"], json!(["Use a *fake*."]));
     let markdown = run(root.path(), "markdown");
-    assert!(String::from_utf8_lossy(&markdown.stdout).contains("`Action.java:3`"));
+    let markdown = String::from_utf8_lossy(&markdown.stdout);
+    assert!(markdown.contains("`Action.java:3`"));
+    assert!(markdown.contains(r"Use a \*fake\*\."), "{markdown}");
 
     write_config(root.path(), json!({"forbiddenConstructors": [{"files": ["src/**"], "types": ["Timer"]}]}));
     let clean = run(root.path(), "json");

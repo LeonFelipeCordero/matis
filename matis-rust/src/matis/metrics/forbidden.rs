@@ -1,11 +1,16 @@
 //! Evaluate user rules for source-level calls and explicit constructors.
 use crate::{
-    parsing::{actions, syntax::ParsedSyntax},
+    parsing::{
+        actions::{self, ActionKind},
+        syntax::ParsedSyntax,
+    },
     paths::globs,
 };
 use serde_json::{Value, json};
 
-pub(super) const RULES: [(&str, &str); 2] = [("forbiddenCalls", "calls"), ("forbiddenConstructors", "types")];
+const CALLS: (&str, &str) = ("forbiddenCalls", "calls");
+const CONSTRUCTORS: (&str, &str) = ("forbiddenConstructors", "types");
+pub(super) const RULES: [(&str, &str); 2] = [CALLS, CONSTRUCTORS];
 
 pub(crate) fn enabled(config: &Value) -> bool {
     RULES.iter().any(|(rule, _)| !config[*rule].as_array().unwrap().is_empty())
@@ -13,16 +18,20 @@ pub(crate) fn enabled(config: &Value) -> bool {
 
 pub(crate) fn findings(config: &Value, syntax: ParsedSyntax<'_>, findings: &mut Vec<Value>) {
     let path = &syntax.source.path;
-    let selected = RULES.map(|(rule, _)| {
+    let select = |(rule, _): (&str, &str)| {
         config[rule].as_array().unwrap().iter().filter(|entry| in_scope(entry, path)).collect::<Vec<_>>()
-    });
-    if selected.iter().all(Vec::is_empty) {
+    };
+    let calls = select(CALLS);
+    let constructors = select(CONSTRUCTORS);
+    if calls.is_empty() && constructors.is_empty() {
         return;
     }
     actions::visit(&syntax, |action| {
-        let index = usize::from(action.constructor);
-        let (rule, target) = RULES[index];
-        for entry in &selected[index] {
+        let ((rule, target), entries) = match action.kind {
+            ActionKind::Call => (CALLS, &calls),
+            ActionKind::Constructor => (CONSTRUCTORS, &constructors),
+        };
+        for entry in entries {
             if let Some(name) = matching_name(entry, target, &action) {
                 findings.push(json!({"rule": rule, "metric": target, "subject": name, "actual": 1, "limit": 0,
                     "files": [{"path": path, "line": action.line}],
