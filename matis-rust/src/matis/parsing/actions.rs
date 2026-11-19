@@ -4,7 +4,7 @@ use super::{
     syntax::{CallSite, ParsedSyntax, callee_node},
 };
 use crate::syntax::{children, field, named_children, text, walk};
-use std::collections::{HashMap, HashSet};
+use std::{collections::HashMap, ops::Range};
 use tree_sitter::Node;
 
 pub(crate) struct Action {
@@ -104,7 +104,12 @@ fn name_parts(node: Node<'_>, source: &[u8]) -> Option<String> {
 #[derive(Default)]
 struct JavaImports {
     types: HashMap<String, String>,
-    values: HashSet<String>,
+    shadows: HashMap<String, Vec<JavaShadow>>,
+}
+
+struct JavaShadow {
+    range: Range<usize>,
+    value: bool,
 }
 
 fn java_imports(root: Node<'_>, source: &[u8]) -> JavaImports {
@@ -120,28 +125,77 @@ fn java_imports(root: Node<'_>, source: &[u8]) -> JavaImports {
         imports.types.insert(leaf.to_owned(), path);
     }
     if !imports.types.is_empty() {
-        omit_shadowed_java_names(root, source, &mut imports);
+        add_java_shadows(root, source, &mut imports);
     }
     imports
 }
 
-// shortcut: skip ambiguous names across the whole file, use scoped symbol resolution for precise shadowing.
-fn omit_shadowed_java_names(root: Node<'_>, source: &[u8], imports: &mut JavaImports) {
+fn add_java_shadows(root: Node<'_>, source: &[u8], imports: &mut JavaImports) {
     for node in walk(root) {
-        match node.kind() {
-            "class_declaration"
-            | "interface_declaration"
-            | "enum_declaration"
-            | "record_declaration"
-            | "annotation_type_declaration" => {
-                imports.types.remove(&text(field(node, &["name"]), source));
-            }
-            "variable_declarator" | "formal_parameter" | "catch_formal_parameter" | "enhanced_for_statement" => {
-                imports.values.insert(text(field(node, &["name"]), source));
-            }
-            _ => {}
+        let Some((declaration, value)) = java_declaration(node) else { continue };
+        let name = text(Some(declaration), source);
+        if imports.types.contains_key(&name) {
+            let range = java_scope(node, declaration);
+            imports.shadows.entry(name).or_default().push(JavaShadow { range, value });
         }
     }
+}
+
+fn java_declaration(node: Node<'_>) -> Option<(Node<'_>, bool)> {
+    let value = match node.kind() {
+        "class_declaration"
+        | "interface_declaration"
+        | "enum_declaration"
+        | "record_declaration"
+        | "annotation_type_declaration" => false,
+        "variable_declarator" | "formal_parameter" | "catch_formal_parameter" | "enhanced_for_statement" => true,
+        "identifier" if inferred_java_parameter(node) => return Some((node, true)),
+        _ => return None,
+    };
+    Some((field(node, &["name"])?, value))
+}
+
+fn inferred_java_parameter(node: Node<'_>) -> bool {
+    node.parent().is_some_and(|parent| {
+        parent.kind() == "inferred_parameters"
+            || parent.kind() == "lambda_expression" && field(parent, &["parameters"]) == Some(node)
+    })
+}
+
+fn java_scope(node: Node<'_>, declaration: Node<'_>) -> Range<usize> {
+    if node.kind() == "enhanced_for_statement"
+        && let Some(body) = field(node, &["body"])
+    {
+        return body.byte_range();
+    }
+    let Some(scope) = std::iter::successors(node.parent(), Node::parent).find(|parent| {
+        matches!(
+            parent.kind(),
+            "block"
+                | "constructor_body"
+                | "switch_block"
+                | "for_statement"
+                | "try_with_resources_statement"
+                | "lambda_expression"
+                | "catch_clause"
+                | "method_declaration"
+                | "constructor_declaration"
+                | "class_body"
+                | "interface_body"
+                | "enum_body"
+                | "annotation_type_body"
+                | "program"
+        )
+    }) else {
+        return node.byte_range();
+    };
+    let start = match scope.kind() {
+        "block" | "constructor_body" | "switch_block" | "for_statement" | "try_with_resources_statement" => {
+            declaration.start_byte()
+        }
+        _ => scope.start_byte(),
+    };
+    start..scope.end_byte()
 }
 
 fn is_constructor(node: Node<'_>) -> bool {
@@ -152,7 +206,12 @@ fn is_constructor(node: Node<'_>) -> bool {
 fn java_qualified(node: Node<'_>, name: &str, imports: &JavaImports) -> Option<String> {
     let constructor = is_constructor(node);
     let (head, tail) = name.split_once('.').map_or((name, ""), |(head, tail)| (head, tail));
-    if !constructor && (tail.is_empty() || imports.values.contains(head)) {
+    if !constructor && tail.is_empty() {
+        return None;
+    }
+    if imports.shadows.get(head).is_some_and(|shadows| {
+        shadows.iter().any(|shadow| (!constructor || !shadow.value) && shadow.range.contains(&node.start_byte()))
+    }) {
         return None;
     }
     // `outer.new Inner()` names a member of the outer expression, not an imported type.

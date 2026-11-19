@@ -66,6 +66,10 @@ fn constructor_policy_checks_explicit_java_type_and_not_references() {
             "  Object second() { return new com.ph.connection.AllowConnection(); }\n",
             "  Object other() { return new other.AllowConnection(); }\n",
             "  Object ref() { return (java.util.function.Supplier<Object>) AllowConnection::new; }\n",
+            "  Object local() { class AllowConnection {} return new AllowConnection(); }\n",
+            "  void run() { AllowConnection.open(); }\n",
+            "  void shadow(Safe AllowConnection) { AllowConnection.open(); }\n",
+            "  java.util.function.Consumer<Safe> use = AllowConnection -> AllowConnection.open();\n",
             "}\n",
         ),
     )
@@ -84,8 +88,11 @@ fn constructor_policy_checks_explicit_java_type_and_not_references() {
     )
     .unwrap();
     fs::write(root.path().join("action.ts"), "const timer = new Timer();\nTimer();").unwrap();
-    let config = json!({"forbiddenConstructors": [{"files": ["**/*.java", "**/*.ts"],
-        "types": ["com.ph.connection.AllowConnection", "Timer"], "message": "Use a fake."}]});
+    let config = json!({
+        "forbiddenConstructors": [{"files": ["**/*.java", "**/*.ts"],
+            "types": ["com.ph.connection.AllowConnection", "Timer"], "message": "Use a fake."}],
+        "forbiddenCalls": [{"files": ["**/*.java"], "calls": ["com.ph.connection.AllowConnection.open"]}]
+    });
     write_config(root.path(), config);
     let check = run(root.path(), "json");
     assert_eq!(check.status.code(), Some(1));
@@ -95,6 +102,7 @@ fn constructor_policy_checks_explicit_java_type_and_not_references() {
         [
             json!({"path": "Action.java", "line": 3}),
             json!({"path": "Action.java", "line": 4}),
+            json!({"path": "Action.java", "line": 8}),
             json!({"path": "action.ts", "line": 1})
         ]
     );
