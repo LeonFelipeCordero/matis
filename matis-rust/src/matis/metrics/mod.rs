@@ -1,4 +1,5 @@
 pub mod adapters;
+mod architecture;
 pub mod artifact;
 pub mod callables;
 pub mod check;

@@ -18,6 +18,28 @@ This repository excludes only `matis-rust/src/matis/syntax.rs`, a small syntax-t
 
 Exclusions suppress only fan-in and fan-out findings for matching files. They do not remove files or edges from the graph or change counts for other files. Line, complexity, change-impact, instability, circular-import, and analysis checks remain active. Existing module checks do not change. Configuration validation rejects wrong types and patterns that the ignore matcher cannot compile.
 
+## Architecture dependency checks
+
+Add `forbiddenDependencies` to the repository-root `matis.json` and run `matis check -f .`:
+
+```json
+{
+  "forbiddenDependencies": [
+    {
+      "from": ["src/ui/**"],
+      "to": ["src/storage/**"],
+      "message": "Use the service interface instead of storage."
+    }
+  ]
+}
+```
+
+Each rule requires nonempty `from` and `to` lists of case-sensitive, repository-relative POSIX globs. Use `**` to match zero or more path components, or an exact path to match one file. Each list matches if any of its patterns matches; `message` is optional. An omitted or empty rule list disables the check.
+
+Only direct, resolved relationships between different analyzed files count. Imports (including type-only imports), calls, references, and inheritance count; containment does not. The example permits UI → service → storage unless UI also depends directly on storage. Each violated rule reports the source and target file once per pair, with the earliest known source line if available. Findings fail the check in CI.
+
+Ignored files and unresolved dependencies cannot produce a finding. This repository enables the rules for Rust boundaries; the dashboard stays excluded by `.matisignore`. The existing repository ownership tests still enforce constraints that a file dependency graph cannot express.
+
 ## Dashboard
 
 A light workspace for engineers mapping unfamiliar code at their desk. Restrained color: plum-tinted neutrals with a muted plum accent for actions, selection, and graph structure. Small green dots signal an imported snapshot, not an automatically current index.

@@ -30,6 +30,10 @@ Use an index, map, or set instead of repeatedly scanning the same collection. Ex
 
 Remove a dependency from the reported cycle. Move shared definitions into a lower-level module, or pass a dependency through a function parameter. Keep dependencies flowing in one direction.
 
+## forbiddenDependencies
+
+Remove the direct dependency between the two reported files. Call a service instead of accessing storage from an entry point, or move a shared contract into the domain and depend on that contract. Keep dependency wiring in the composition root.
+
 ## maxChangeImpact
 
 Review the files that depend on this file or module. Separate stable interfaces from frequently changing implementation. Remove unnecessary dependencies rather than moving them to hide the measurement.

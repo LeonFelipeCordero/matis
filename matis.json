@@ -2,6 +2,23 @@
   "maxFanIn": 30,
   "maxFanOut": 20,
   "fanExclude": ["/matis-rust/src/matis/syntax.rs"],
+  "forbiddenDependencies": [
+    {
+      "from": ["matis-rust/src/matis/cli/**", "matis-rust/src/matis/services/**"],
+      "to": ["matis-rust/src/matis/persistence/**"],
+      "message": "Use capability services or domain ports. Bootstrap wires persistence implementations."
+    },
+    {
+      "from": ["matis-rust/src/matis/persistence/**"],
+      "to": ["matis-rust/src/matis/services/**"],
+      "message": "Persistence implements domain ports; it must not depend on services."
+    },
+    {
+      "from": ["matis-rust/src/matis/domain/**"],
+      "to": ["matis-rust/src/matis/cli/**", "matis-rust/src/matis/services/**", "matis-rust/src/matis/persistence/**"],
+      "message": "Keep entry points, services, and storage implementations out of the domain."
+    }
+  ],
   "mutations": {
     "rules": [
       "arithmetic.add-to-subtract",

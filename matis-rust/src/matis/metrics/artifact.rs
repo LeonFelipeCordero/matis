@@ -213,7 +213,7 @@ fn level_view(nodes: &[Value], edges: &[Value], level: &str) -> Value {
         .collect();
     json!({"nodes": keys, "edges": projected})
 }
-fn projected_relationships<'a>(
+pub(super) fn projected_relationships<'a>(
     edges: &'a [Value],
     level: &str,
     lookup: &BTreeMap<&str, &Value>,

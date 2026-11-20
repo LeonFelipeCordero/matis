@@ -88,6 +88,7 @@ Dashboard composition opens one explicit deferred transaction for the complete g
 | Saved graph traversal | Rust `services/navigation*.rs` |
 | Dashboard graph response | `services/graph-view.ts` and `services/graph-details.ts` |
 | Graph projection calculations | Dashboard `project-graph*.ts`, `graph-analysis.ts`, and graph helpers |
+| Dependency rules | [`matis.json`](../matis.json); evaluator in `matis-rust/src/matis/metrics/architecture.rs` |
 | Ownership guardrails | Rust `tests/integration/architecture/ownership.rs`; dashboard `tests/database-*` |
 
 ## Compatibility
@@ -105,7 +106,19 @@ Custom library integrations use the capability ports in `domain/storage.rs` and 
 
 ## Checks and test ownership
 
-Rust architecture tests enforce exclusive table access, owner-service port access, private persistence, and acyclic service dependencies. Dashboard architecture tests enforce equivalent rules, including relative and aliased imports and storage-handle forwarding.
+Run `matis check --folder .` from the repository root. CI runs the same check with `--format json`. The `forbiddenDependencies` rules in [`matis.json`](../matis.json) reject these direct Rust dependencies:
+
+| From | Must not depend on |
+| --- | --- |
+| `cli/` or `services/` | `persistence/` |
+| `persistence/` | `services/` |
+| `domain/` | `cli/`, `services/`, or `persistence/` |
+
+Paths are relative to `matis-rust/src/matis/` in the table. `bootstrap.rs` is outside those source scopes so it can wire persistence implementations into services. Both persistence and services can use domain ports.
+
+Each rule matches repository-relative `from` and `to` globs against direct, resolved dependencies between files, including type-only imports. The check reports the source file and line when available, the target file, and the rule message. It does not follow indirect paths or detect unresolved dependencies. See the [rule format](../DESIGN.md#architecture-dependency-checks).
+
+Keep the architecture tests. The dependency graph cannot enforce exclusive table access or owner-service port access. Rust architecture tests also enforce private persistence and acyclic service dependencies. The root Matis check excludes `dashboard/` through `.matisignore`; dashboard architecture tests enforce its boundaries separately, including relative and aliased imports and storage-handle forwarding.
 
 Use existing behavioral contracts for registration conflicts, replacement rollback, revision consistency, bounded navigation, ordered reports and candidates, and Rust/Bun interoperability. Batch-read tests cover scopes above SQLite's conservative bind limit. Keep unit tests in memory; real database and process contracts stay in integration tests.
 
