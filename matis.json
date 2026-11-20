@@ -7,12 +7,12 @@
     {
       "from": ["matis-rust/src/matis/cli/**", "matis-rust/src/matis/services/**"],
       "to": ["matis-rust/src/matis/persistence/**"],
-      "message": "CLI code must call workflows or services. Services must use domain ports. Bootstrap wires persistence."
+      "message": "CLI code must call workflows or services. Services use repository interfaces. Bootstrap wires persistence."
     },
     {
       "from": ["matis-rust/src/matis/persistence/**"],
       "to": ["matis-rust/src/matis/services/**"],
-      "message": "Persistence implements domain ports. It must not depend on services."
+      "message": "Persistence must not depend on the service layer."
     },
     {
       "from": ["matis-rust/src/matis/domain/**"],
