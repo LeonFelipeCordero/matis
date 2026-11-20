@@ -1,22 +1,23 @@
 {
   "maxFanIn": 30,
   "maxFanOut": 20,
+  "maxCircularImportGroups": 0,
   "fanExclude": ["/matis-rust/src/matis/syntax.rs"],
   "forbiddenDependencies": [
     {
       "from": ["matis-rust/src/matis/cli/**", "matis-rust/src/matis/services/**"],
       "to": ["matis-rust/src/matis/persistence/**"],
-      "message": "Use capability services or domain ports. Bootstrap wires persistence implementations."
+      "message": "CLI code must call workflows or services. Services use repository interfaces. Bootstrap wires persistence."
     },
     {
       "from": ["matis-rust/src/matis/persistence/**"],
       "to": ["matis-rust/src/matis/services/**"],
-      "message": "Persistence implements domain ports; it must not depend on services."
+      "message": "Persistence must not depend on the service layer."
     },
     {
       "from": ["matis-rust/src/matis/domain/**"],
       "to": ["matis-rust/src/matis/cli/**", "matis-rust/src/matis/services/**", "matis-rust/src/matis/persistence/**"],
-      "message": "Keep entry points, services, and storage implementations out of the domain."
+      "message": "Keep the domain independent of CLI, services, and persistence."
     }
   ],
   "mutations": {
