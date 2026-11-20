@@ -1,6 +1,8 @@
 import { Suspense, lazy, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Network } from 'lucide-react'
+import { api } from '@/lib/api'
+import { Button } from '@/components/ui/button'
 import { GraphSidebar } from './graph-sidebar'
 import { GraphNavigation } from './graph-navigation'
 import { GraphModeNavigation } from './graph-mode-navigation'
@@ -8,8 +10,6 @@ import { GraphReport } from './graph-report'
 import type { ComponentProps } from 'react'
 import type { Architecture, GraphView, ViewCycle } from '@/lib/graph-data'
 import type { GraphNode, GraphScope } from '@/lib/project-graph'
-import { api } from '@/lib/api'
-import { Button } from '@/components/ui/button'
 
 const GraphCanvas = lazy(() => import('./graph-canvas'))
 

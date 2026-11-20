@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button'
 import { GraphComplexity } from './graph-complexity'
 import { GraphDependencyMetrics } from './graph-dependency-metrics'
 import { GraphSizeMetrics } from './graph-size-metrics'
@@ -5,7 +6,6 @@ import { GraphFileComplexity } from './graph-file-complexity'
 import type { ArtifactNode } from '@/lib/architecture-artifact'
 import type { GraphView } from '@/lib/graph-data'
 import type { GraphNode } from '@/lib/project-graph'
-import { Button } from '@/components/ui/button'
 
 export function ReportItem({
   node,

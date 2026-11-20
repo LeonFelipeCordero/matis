@@ -1,10 +1,10 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { fixtureNodes } from '@/lib/project-graph-fixture'
 import { GraphReport } from './graph-report'
 import { reportView } from './graph-report-test.helpers'
 import { GraphSizeMetrics } from './graph-size-metrics'
 import type { Artifact, NodeSizeMetrics } from '@/lib/architecture-artifact'
-import { fixtureNodes } from '@/lib/project-graph-fixture'
 
 function fixture(key: string, properties?: NodeSizeMetrics): Artifact {
   const nodes = fixtureNodes()

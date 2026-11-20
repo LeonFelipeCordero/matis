@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { sumFileComplexity } from '@/lib/file-complexity'
+import { buildProjectGraph } from '@/lib/project-graph'
 import { GraphFileComplexity } from './graph-file-complexity'
 import { GraphReport } from './graph-report'
 import { reportView } from './graph-report-test.helpers'
 import type { Artifact, ArtifactNode } from '@/lib/architecture-artifact'
 import type { GraphScope, ProjectGraph } from '@/lib/project-graph'
-import { sumFileComplexity } from '@/lib/file-complexity'
-import { buildProjectGraph } from '@/lib/project-graph'
 
 type ComplexityNode = {
   id: string

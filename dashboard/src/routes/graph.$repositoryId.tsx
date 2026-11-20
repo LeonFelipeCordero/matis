@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ArrowLeft, Network, RefreshCw } from 'lucide-react'
-import type { ImportedGraph } from '@/lib/api'
 import { api, formatDate, repositoriesQuery } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { GraphExplorer } from '@/components/graph/graph-explorer'
+import type { ImportedGraph } from '@/lib/api'
 
 export const Route = createFileRoute('/graph/$repositoryId')({
   component: GraphPage,

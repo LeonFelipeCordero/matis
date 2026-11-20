@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { fixtureDetails } from '@/lib/graph-details-test.helpers'
+import { fixtureNodes } from '@/lib/project-graph-fixture'
+import { buildProjectGraph } from '@/lib/project-graph'
 import { GraphReport } from './graph-report'
 import { GraphSidebar } from './graph-sidebar'
 import { ReportFindings } from './report-findings'
 import type { GraphView } from '@/lib/graph-data'
-import { fixtureDetails } from '@/lib/graph-details-test.helpers'
-import { fixtureNodes } from '@/lib/project-graph-fixture'
-import { buildProjectGraph } from '@/lib/project-graph'
 
 function fixture(): GraphView {
   const nodes = fixtureNodes()

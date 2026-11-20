@@ -6,12 +6,12 @@ import {
   Folder,
 } from 'lucide-react'
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ReportItem } from './report-item'
 import type { ArtifactNode } from '@/lib/architecture-artifact'
 import type { GraphView } from '@/lib/graph-data'
 import type { GraphNode } from '@/lib/project-graph'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 
 export type ReportItemProps = {
   view: GraphView

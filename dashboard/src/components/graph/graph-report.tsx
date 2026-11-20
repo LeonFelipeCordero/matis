@@ -1,9 +1,9 @@
 import { ArrowUpRight, Info } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { ReportFindings } from './report-findings'
 import { ReportItems } from './report-items'
 import type { ReportItemProps } from './report-items'
 import type { ViewCycle } from '@/lib/graph-data'
-import { Button } from '@/components/ui/button'
 
 export function GraphReport({
   onCycleScope,
